@@ -920,3 +920,204 @@ Résumé des messages reçus :
 2025-07-20 14:26:44,638 [INFO] 🔢 count_limit manquant mais time_limit présent → fallback à 500 messages max
 2025-07-20 14:26:44,638 [INFO] 🔧 Résumé configuré avec : start=2025-07-19 00:00:00, end=2025-07-19 23:59:59, limit=500, authors=['<@1396036318252765275>'], ascending=None
 2025-07-20 14:26:45,164 [INFO] ✅ Messages valides retenus : 0
+2025-07-20 14:28:16,686 [INFO] 🚀 Starting Galactia...
+2025-07-20 14:28:16,688 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2025-07-20 14:28:16,689 [INFO] logging in using static token
+2025-07-20 14:28:17,458 [INFO] Shard ID None has connected to Gateway (Session ID: af06215d31ee8c97724c9c9f2a97665b).
+2025-07-20 14:28:19,460 [INFO] ✅ Galactia is ready! Logged in as Galactia#4357 (ID: 1396036318252765275)
+2025-07-20 14:28:29,786 [INFO] 📨 Mention received: <@1396036318252765275> résume depuis hier
+2025-07-20 14:28:31,142 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-20 14:28:31,146 [INFO] ⚠️ Sanitize log: message original et version nettoyée détectées
+2025-07-20 14:28:31,146 [INFO] 🔹 Original : <@1396036318252765275> résume depuis hier
+2025-07-20 14:28:31,146 [INFO] 🔹 Nettoyé  : <@1396036318252765275> depuis hier
+2025-07-20 14:28:32,251 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-20 14:28:32,256 [INFO] 📥 JSON retourné par GPT pour intent : {
+    "summary": true,
+    "wrong_channel": false,
+    "authors": ["1396036318252765275"],
+    "time_limit": "depuis hier",
+    "count_limit": null,
+    "ascending": null,
+    "focus": null
+}
+2025-07-20 14:28:32,257 [INFO] ⚠️  Auteurs détectés = uniquement le bot, suppression du filtre authors
+2025-07-20 14:28:32,257 [INFO] 🕒 Heure actuelle (Europe/Paris) : 2025-07-20 14:28:32.257404
+2025-07-20 14:28:32,992 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-20 14:28:32,995 [INFO] 🛠️ Correction manuelle : expression incomplète détectée ('depuis hier') → end ajusté à now (2025-07-20 14:28:32.257404)
+2025-07-20 14:28:32,996 [INFO] 📅 Dates retenues : start = 2025-07-19 00:00:00, end = 2025-07-20 14:28:32.257404
+2025-07-20 14:28:32,996 [INFO] 📅 time_limit précisé → 2025-07-19 00:00:00 → 2025-07-20 14:28:32.257404
+2025-07-20 14:28:32,996 [INFO] 🔢 count_limit manquant mais time_limit présent → fallback à 500 messages max
+2025-07-20 14:28:32,996 [INFO] 🔧 Résumé configuré avec : start=2025-07-19 00:00:00, end=2025-07-20 14:28:32.257404, limit=500, authors=TOUS, ascending=None
+2025-07-20 14:28:33,826 [INFO] ✅ Messages valides retenus : 133
+2025-07-20 14:28:33,827 [INFO] 📏 Tokens estimés envoyés à GPT : 3116
+2025-07-20 14:28:33,827 [INFO] 🧾 Nombre total de lignes conservées : 133
+2025-07-20 14:28:33,827 [INFO] 🔸 Première ligne : [20/07/2025 12:28] Elsia : <@1396036318252765275> résume depuis hier...
+2025-07-20 14:28:33,827 [INFO] 🔸 Dernière ligne : [19/07/2025 08:22] Elsia : <@1396036318252765275> résume la conversation de la journée...
+2025-07-20 14:28:33,827 [INFO] 🧠 Prompt complet envoyé à GPT pour le résumé :
+2025-07-20 14:28:33,827 [INFO] ---- SYSTEM ----
+2025-07-20 14:28:33,827 [INFO] ['Tu es Galactia, un assistant IA pour la guilde Les Galactiques.', 'Tu dois générer un résumé synthétique et clair des messages reçus.', 'Ton résumé peut prendre la forme d’une liste ou d’un paragraphe selon le contexte.', "N'invente jamais de contenu. Résume seulement ce qui est présent.", "Ignore les messages qui sont des commandes de résumé (ex : '@Galactia résume ...')."]
+2025-07-20 14:28:33,828 [INFO] ---- USER ----
+2025-07-20 14:28:33,828 [INFO] [20/07/2025 12:28] Elsia : <@1396036318252765275> résume depuis hier
+[20/07/2025 12:26] Elsia : <@1396036318252765275> résume depuis hier
+[20/07/2025 12:26] Elsia : <@1396036318252765275> résume depuis hier
+[20/07/2025 12:18] Elsia : <@1396036318252765275>  résume depuis hier
+[20/07/2025 12:16] Elsia : <@1396036318252765275> résume depuis hier
+[20/07/2025 12:12] Elsia : <@1396036318252765275> résume -1 message
+[20/07/2025 12:05] Elsia : <@1396036318252765275> résume depuis hier
+[20/07/2025 12:03] Elsia : <@1396036318252765275> résume depuis hier
+[20/07/2025 11:57] Elsia : <@1396036318252765275> résume depuis hier
+[20/07/2025 11:56] Elsia : <@&1396043382849011798> résume les 20 derniers messages
+[20/07/2025 11:39] Elsia : <@1396036318252765275> Prend les 20 derniers messages
+[20/07/2025 11:37] Elsia : <@1396036318252765275> résume les 20 derniers messages de l'année 2024
+[20/07/2025 11:37] Elsia : <@1396036318252765275> résume les 20 message derniers de l'année 2025
+[20/07/2025 11:03] Elsia : <@1396036318252765275> résume les 20 message derniers de l'année 2025
+[20/07/2025 10:48] Elsia : <@1396036318252765275> résume 20 message de l'année 2025
+[20/07/2025 10:48] Elsia : résume 20 messages de l'année 2025
+[20/07/2025 10:47] Elsia : <@1396036318252765275> résume 100 messages de l'année 2025
+[20/07/2025 10:45] Elsia : <@1396036318252765275> résume 100 messages de l'année 2025
+[20/07/2025 10:42] Elsia : <@1396036318252765275> résume 100 messages de l'année 2025
+[20/07/2025 10:38] Elsia : <@1396036318252765275> résume 100 messages de l'année 2025
+[20/07/2025 10:35] Elsia : <@1396036318252765275> résume 10 messages de l'année 2025
+[20/07/2025 10:24] Elsia : <@1396036318252765275> résume 10 messages de l'année 2024
+[20/07/2025 10:17] Elsia : <@1396036318252765275> résume 2024
+[20/07/2025 10:17] Elsia : <@1396036318252765275> résume
+[20/07/2025 10:16] Elsia : <@1396036318252765275> résume les messages d'Elsia
+[20/07/2025 10:15] Elsia : <@1396036318252765275> résume les 500 d
+2025-07-20 14:28:33,828 [INFO] 📎 (contenu du user tronqué dans les logs, >2000 caractères)
+2025-07-20 14:28:36,940 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-20 14:28:36,941 [INFO] 📤 Résumé envoyé à l'utilisateur :
+ℹ️ Aucun nombre de messages précisé → récupération de 500 messages max dans la plage de temps.
+
+- Elsia demande plusieurs fois à <@1396036318252765275> de résumer les messages depuis hier, de prendre les 20 derniers messages ou les 100 derniers messages de l'année 2025.
+- Elsia demande des résumés sur des périodes spécifiques comme les messages de l'année 2024, de 2025, du mois dernier, de la semaine dernière, d'avril 2025, de mai 2025.
+- Elsia demande des résumés sur des sujets précis tels que les discussions sur le recrutement, les messages d'Elsia, les discussions dans un salon spécifique, le patch 11.7 de TWW, la conversation d'une URL donnée et les tests réalisés sur la personne.
+- Elsia donne des indications contradictoires sur les résumés demandés.
+- Il y a aussi des messages concernant la durée du travail en Allemagne et des discussions sur les congés parentaux et le système de travail en Allemagne.
+2025-07-20 14:29:09,543 [INFO] 📨 Mention received: <@1396036318252765275> résume les messages d'hier
+2025-07-20 14:29:12,915 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-20 14:29:13,817 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-20 14:29:13,819 [INFO] 📥 JSON retourné par GPT pour intent : {
+    "summary": true,
+    "wrong_channel": false,
+    "authors": ["1396036318252765275"],
+    "time_limit": "hier",
+    "count_limit": null,
+    "ascending": null,
+    "focus": null
+}
+2025-07-20 14:29:13,819 [INFO] ⚠️  Auteurs détectés = uniquement le bot, suppression du filtre authors
+2025-07-20 14:29:13,820 [INFO] 🕒 Heure actuelle (Europe/Paris) : 2025-07-20 14:29:13.820045
+2025-07-20 14:29:14,545 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-20 14:29:14,547 [INFO] 📅 Dates retenues : start = 2025-07-19 00:00:00, end = 2025-07-19 23:59:59
+2025-07-20 14:29:14,547 [INFO] 📅 time_limit précisé → 2025-07-19 00:00:00 → 2025-07-19 23:59:59
+2025-07-20 14:29:14,547 [INFO] 🔢 count_limit manquant mais time_limit présent → fallback à 500 messages max
+2025-07-20 14:29:14,547 [INFO] 🔧 Résumé configuré avec : start=2025-07-19 00:00:00, end=2025-07-19 23:59:59, limit=500, authors=TOUS, ascending=None
+2025-07-20 14:29:15,168 [INFO] ✅ Messages valides retenus : 90
+2025-07-20 14:29:15,169 [INFO] 📏 Tokens estimés envoyés à GPT : 2322
+2025-07-20 14:29:15,169 [INFO] 🧾 Nombre total de lignes conservées : 90
+2025-07-20 14:29:15,169 [INFO] 🔸 Première ligne : [19/07/2025 19:58] Elsia : <@1396036318252765275> débrief le mois dernier stp...
+2025-07-20 14:29:15,169 [INFO] 🔸 Dernière ligne : [19/07/2025 08:22] Elsia : <@1396036318252765275> résume la conversation de la journée...
+2025-07-20 14:29:15,170 [INFO] 🧠 Prompt complet envoyé à GPT pour le résumé :
+2025-07-20 14:29:15,170 [INFO] ---- SYSTEM ----
+2025-07-20 14:29:15,170 [INFO] ['Tu es Galactia, un assistant IA pour la guilde Les Galactiques.', 'Tu dois générer un résumé synthétique et clair des messages reçus.', 'Ton résumé peut prendre la forme d’une liste ou d’un paragraphe selon le contexte.', "N'invente jamais de contenu. Résume seulement ce qui est présent.", "Ignore les messages qui sont des commandes de résumé (ex : '@Galactia résume ...')."]
+2025-07-20 14:29:15,170 [INFO] ---- USER ----
+2025-07-20 14:29:15,170 [INFO] [19/07/2025 19:58] Elsia : <@1396036318252765275> débrief le mois dernier stp
+[19/07/2025 19:46] Elsia : <@1396036318252765275> résume les messages du jour stp
+[19/07/2025 19:46] Elsia : <@1396036318252765275> résume les messages d'hier stp
+[19/07/2025 19:37] Elsia : <@1396036318252765275> résume les messages d'hier stp
+[19/07/2025 19:34] Elsia : <@1396036318252765275> résume les messages d'hier stp
+[19/07/2025 19:31] Elsia : <@1396036318252765275> résume les messages d'hier stp
+[19/07/2025 19:31] Elsia : <@1396036318252765275> résume les messages d'hier stp
+[19/07/2025 19:26] Elsia : <@1396036318252765275> résume les message d'hier stp
+[19/07/2025 19:21] Elsia : <@1396036318252765275> résume les message d'hier stp
+[19/07/2025 19:17] Elsia : <@1396036318252765275> résume les messages d'avril 2025
+[19/07/2025 19:16] Elsia : <@1396036318252765275> résume les messages de mai 2025
+[19/07/2025 19:12] Elsia : <@1396036318252765275> résume les messages du mois dernier
+[19/07/2025 19:09] Elsia : <@1396036318252765275> résume les messages du mois dernier
+[19/07/2025 19:06] Elsia : <@1396036318252765275> résume les messages d'hier
+[19/07/2025 19:05] Elsia : <@1396036318252765275> résume les messages de l'année dernière
+[19/07/2025 19:03] Elsia : <@1396036318252765275> résume les messages de l'année dernière
+[19/07/2025 19:00] Elsia : <@1396036318252765275> résume les messages de l'année dernière
+[19/07/2025 19:00] Elsia : <@1396036318252765275> ésume les messages de l'année dernière
+[19/07/2025 18:57] Elsia : <@1396036318252765275> résume les messages de l'année dernière
+[19/07/2025 18:56] Elsia : <@1396036318252765275> résume les messages de l'année dernière
+[19/07/2025 17:44] Elsia : <@1396036318252765275> résume les messages depuis la semaine dernière
+[19/07/2025 17:41] Elsia : <@1396036318252765275> résume les messages depuis la semaine dernière
+[19/07/2025 17:39] Elsia : <@1396036318252765275> résume les messages depuis la semaine dernière
+[19/07/2025 17:35] Elsia : <@13
+2025-07-20 14:29:15,171 [INFO] 📎 (contenu du user tronqué dans les logs, >2000 caractères)
+2025-07-20 14:29:17,381 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-20 14:29:17,383 [INFO] 📤 Résumé envoyé à l'utilisateur :
+ℹ️ Aucun nombre de messages précisé → récupération de 500 messages max dans la plage de temps.
+
+- Elsia demande plusieurs résumés de messages du mois dernier, d'hier, d'avril 2025, de mai 2025, et de l'année dernière.
+- Elsia demande également des résumés des messages depuis la semaine dernière, des 10 derniers messages, des 2 dernières heures, des discussions dans un salon spécifique, du patch 11.7 de TWW, des discussions sur un lien spécifique, du matin avec un ajout spécifique, des 10000 derniers messages, depuis 10 minutes, des tests réalisés sur l'assistant IA, des derniers messages, des 300 derniers messages, des discussions de ce matin et du progress de la guilde "Les Galactiques" sur wow.
+- Elsia mentionne des échanges sur le thème des congés en Allemagne, notamment sur la durée du travail, les congés parentaux, le travail à temps partiel et les spécificités des congés parentaux en Allemagne.
+- Elsia demande également des résumés généraux sans informations supplémentaires préci
+2025-07-20 14:29:17,383 [INFO] 📎 (contenu tronqué dans les logs, >1000 caractères)
+2025-07-20 14:30:11,239 [INFO] 📨 Mention received: <@1396036318252765275> résume les messages d'Elsia depuis hier
+2025-07-20 14:30:12,392 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-20 14:30:13,485 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-20 14:30:13,486 [INFO] 📥 JSON retourné par GPT pour intent : {
+    "summary": true,
+    "wrong_channel": false,
+    "authors": ["Elsia"],
+    "time_limit": "depuis hier",
+    "count_limit": null,
+    "ascending": null,
+    "focus": null
+}
+2025-07-20 14:30:13,486 [INFO] 🕒 Heure actuelle (Europe/Paris) : 2025-07-20 14:30:13.486537
+2025-07-20 14:30:14,381 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-20 14:30:14,389 [INFO] 🛠️ Correction manuelle : expression incomplète détectée ('depuis hier') → end ajusté à now (2025-07-20 14:30:13.486537)
+2025-07-20 14:30:14,389 [INFO] 📅 Dates retenues : start = 2025-07-19 00:00:00, end = 2025-07-20 14:30:13.486537
+2025-07-20 14:30:14,389 [INFO] 📅 time_limit précisé → 2025-07-19 00:00:00 → 2025-07-20 14:30:13.486537
+2025-07-20 14:30:14,389 [INFO] 🔢 count_limit manquant mais time_limit présent → fallback à 500 messages max
+2025-07-20 14:30:14,390 [INFO] 🔧 Résumé configuré avec : start=2025-07-19 00:00:00, end=2025-07-20 14:30:13.486537, limit=500, authors=['Elsia'], ascending=None
+2025-07-20 14:30:15,306 [INFO] ✅ Messages valides retenus : 135
+2025-07-20 14:30:15,307 [INFO] 📏 Tokens estimés envoyés à GPT : 3157
+2025-07-20 14:30:15,307 [INFO] 🧾 Nombre total de lignes conservées : 135
+2025-07-20 14:30:15,307 [INFO] 🔸 Première ligne : [20/07/2025 12:30] Elsia : <@1396036318252765275> résume les messages d'Elsia depuis hier...
+2025-07-20 14:30:15,308 [INFO] 🔸 Dernière ligne : [19/07/2025 08:22] Elsia : <@1396036318252765275> résume la conversation de la journée...
+2025-07-20 14:30:15,308 [INFO] 🧠 Prompt complet envoyé à GPT pour le résumé :
+2025-07-20 14:30:15,308 [INFO] ---- SYSTEM ----
+2025-07-20 14:30:15,308 [INFO] ['Tu es Galactia, un assistant IA pour la guilde Les Galactiques.', 'Tu dois générer un résumé synthétique et clair des messages reçus.', 'Ton résumé peut prendre la forme d’une liste ou d’un paragraphe selon le contexte.', "N'invente jamais de contenu. Résume seulement ce qui est présent.", "Ignore les messages qui sont des commandes de résumé (ex : '@Galactia résume ...')."]
+2025-07-20 14:30:15,308 [INFO] ---- USER ----
+2025-07-20 14:30:15,309 [INFO] [20/07/2025 12:30] Elsia : <@1396036318252765275> résume les messages d'Elsia depuis hier
+[20/07/2025 12:29] Elsia : <@1396036318252765275> résume les messages d'hier
+[20/07/2025 12:28] Elsia : <@1396036318252765275> résume depuis hier
+[20/07/2025 12:26] Elsia : <@1396036318252765275> résume depuis hier
+[20/07/2025 12:26] Elsia : <@1396036318252765275> résume depuis hier
+[20/07/2025 12:18] Elsia : <@1396036318252765275>  résume depuis hier
+[20/07/2025 12:16] Elsia : <@1396036318252765275> résume depuis hier
+[20/07/2025 12:12] Elsia : <@1396036318252765275> résume -1 message
+[20/07/2025 12:05] Elsia : <@1396036318252765275> résume depuis hier
+[20/07/2025 12:03] Elsia : <@1396036318252765275> résume depuis hier
+[20/07/2025 11:57] Elsia : <@1396036318252765275> résume depuis hier
+[20/07/2025 11:56] Elsia : <@&1396043382849011798> résume les 20 derniers messages
+[20/07/2025 11:39] Elsia : <@1396036318252765275> Prend les 20 derniers messages
+[20/07/2025 11:37] Elsia : <@1396036318252765275> résume les 20 derniers messages de l'année 2024
+[20/07/2025 11:37] Elsia : <@1396036318252765275> résume les 20 message derniers de l'année 2025
+[20/07/2025 11:03] Elsia : <@1396036318252765275> résume les 20 message derniers de l'année 2025
+[20/07/2025 10:48] Elsia : <@1396036318252765275> résume 20 message de l'année 2025
+[20/07/2025 10:48] Elsia : résume 20 messages de l'année 2025
+[20/07/2025 10:47] Elsia : <@1396036318252765275> résume 100 messages de l'année 2025
+[20/07/2025 10:45] Elsia : <@1396036318252765275> résume 100 messages de l'année 2025
+[20/07/2025 10:42] Elsia : <@1396036318252765275> résume 100 messages de l'année 2025
+[20/07/2025 10:38] Elsia : <@1396036318252765275> résume 100 messages de l'année 2025
+[20/07/2025 10:35] Elsia : <@1396036318252765275> résume 10 messages de l'année 2025
+[20/07/2025 10:24] Elsia : <@1396036318252765275> résume 10 messages de l'année 2024
+[20/07/2025 10:17] Elsia : <@1396036318252765275> résume 2024
+[20/07/2025 10:17] Elsia : <@13960
+2025-07-20 14:30:15,309 [INFO] 📎 (contenu du user tronqué dans les logs, >2000 caractères)
+2025-07-20 14:30:17,354 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-07-20 14:30:17,359 [INFO] 📤 Résumé envoyé à l'utilisateur :
+ℹ️ Aucun nombre de messages précisé → récupération de 500 messages max dans la plage de temps.
+
+- Elsia demande régulièrement à une personne non identifiée de résumer les messages depuis hier, du jour, de la semaine dernière, du mois dernier et de l'année précédente.
+- Elsia demande un résumé de la discussion de la journée.
+- Une discussion sur l'Allemagne et ses pratiques de congés et de travail a eu lieu.
+- Hooper mentionne le fait que les congés parental sont longs en Allemagne.
+- Lucria explique que les parents doivent prendre un congé parental avant de mettre leur enfant dans une crèche.
+- Brackis parle de la productivité par heure en Allemagne.
+- Elsia souhaite connaître le progrès de la guilde "Les Galactiques" sur Wow.
