@@ -9,6 +9,15 @@ from dateutil import parser as date_parser
 from ai_helpers import summary_intent_prompt, time_limit_range_prompt
 import logging
 
+# Chemin du fichier .env (par défaut ".env" si non précisé)
+env_file = os.getenv("ENV_FILE", ".env")
+print(f"📦 Chargement des variables depuis {env_file}")
+load_dotenv(dotenv_path=env_file)
+
+# Logs de debug (facultatif)
+print(f"🚀 Starting Galactia in {os.getenv('ENV_MODE', 'undefined')} mode...")
+
+
 log_dir = "logs"
 os.makedirs(log_dir, exist_ok=True)
 
@@ -23,9 +32,6 @@ logging.basicConfig(
         logging.StreamHandler()  # conserve les logging.infos dans la console
     ]
 )
-
-logging.info("🚀 Starting Galactia...")
-load_dotenv()
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -138,7 +144,12 @@ async def fetch_valid_messages(channel, start=None, end=None, limit=None, author
     def is_author_allowed(author_display_name, author_id, authors_list):
         if not authors_list:
             return True
-        match = author_display_name.strip() in [a.strip() for a in authors_list] or author_id in authors_list
+        # Normalize both IDs and display names to strings for comparison
+        normalized_list = [str(a).strip() for a in authors_list]
+        match = (
+            author_display_name.strip() in normalized_list
+            or str(author_id) in normalized_list
+        )
         return match
 
     # 1. Récupère un nombre maximal (ex. 1000), pas le vrai limit
@@ -166,6 +177,9 @@ async def generate_summary(messages, focus=None):
     try:
         if not messages:
             return "Aucun message pertinent à résumer."
+        
+        # On s’assure que le résumé sera toujours du plus ancien au plus récent
+        messages.sort(key=lambda m: m.created_at)
 
         lines = [
             f"[{msg.created_at.strftime('%d/%m/%Y %H:%M')}] {msg.author.display_name} : {msg.content}"
@@ -178,11 +192,11 @@ async def generate_summary(messages, focus=None):
         total_tokens = 0
 
         # On garde les messages les plus récents compatibles
-        for line in reversed(lines):
+        for line in lines:
             tokens = estimate_token_count(line)
             if total_tokens + tokens > token_limit:
                 break
-            selected_lines.insert(0, line)
+            selected_lines.append(line)
             total_tokens += tokens
 
         messages_text = "\n".join(selected_lines)

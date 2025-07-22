@@ -1,4 +1,20 @@
-.env
+# Fichiers Python
 __pycache__/
-*.log
+*.py[cod]
+*.pyo
+
+# Environnements virtuels
+venv/
+.env
+.env.*
+
+# Fichiers logs
 logs/
+*.log
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Fichiers spécifiques à l'IDE
+.vscod

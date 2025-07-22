@@ -36,7 +36,7 @@ def time_limit_range_prompt(now_iso, time_limit_str):
                 "⚠️ Si l'expression contient le mot **'depuis'** ou **'from'** et **ne donne qu’un point de départ**, "
                 "alors tu dois prendre **la date et l’heure actuelle comme fin** de la période.\n\n"
 
-                "✅ Exemples valides (à adapter avec la dete et l’heure actuelle) :\n"
+                "✅ Exemples valides (à adapter avec la date et l’heure actuelle) :\n"
                 " - 'hier' (sans depuis) → '2025-07-19T00:00:00,2025-07-19T23:59:59'\n"
                 " - 'depuis hier' (exemple aujourd’hui = dimanche 20) → '2025-07-19T00:00:00,2025-07-20T14:05:00'\n"
                 " - 'depuis mardi' → '2025-07-16T00:00:00,2025-07-20T14:05:00'\n"
