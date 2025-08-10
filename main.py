@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from dateutil import parser as date_parser
-from ai_helpers import summary_intent_prompt, time_limit_range_prompt
+from ai_helpers import summary_intent_prompt, time_limit_range_prompt, extract_authors_from_message
 import logging
 import pytz
 
@@ -168,6 +168,9 @@ async def fetch_valid_messages(channel, start=None, end=None, limit=None, author
             continue
         if msg.author.bot:
             continue
+        # ⬇️ ignore les messages qui mentionnent le bot (commandes)
+        if bot.user in msg.mentions:
+            continue
         if authors and not is_author_allowed(msg.author.display_name, str(msg.author.id), authors):
             continue
         messages.append(msg)
@@ -219,9 +222,8 @@ async def generate_summary(messages, focus=None):
         instructions = [
             "Tu es Galactia, un assistant IA pour la guilde Les Galactiques.",
             "Tu dois générer un résumé synthétique et clair des messages reçus.",
-            "Ton résumé peut prendre la forme d’une liste ou d’un paragraphe selon le contexte.",
-            "N'invente jamais de contenu. Résume seulement ce qui est présent.",
-            "Ignore les messages qui sont des commandes de résumé (ex : '@Galactia résume ...')."
+            "Ton résumé peut être mis en forme pour une meilleure lisibilité.",
+            "N'invente jamais de contenu. Résume seulement ce qui est présent."
         ]
         if focus:
             instructions.append(f"Concentre-toi uniquement sur les messages qui concernent : {focus}.")
@@ -261,9 +263,15 @@ async def on_message(message):
         try:
             intent = json.loads(intent_json)
 
-            if intent.get("authors") == [str(bot.user.id)]:
-                logging.info("⚠️  Auteurs détectés = uniquement le bot, suppression du filtre authors")
-                intent["authors"] = None
+            # 👉 Construit le filtre auteurs UNIQUEMENT depuis le message (pas depuis le LLM)
+            requested_authors = extract_authors_from_message(message, bot.user.id)
+            if requested_authors:
+                authors = requested_authors
+                logging.info(f"👥 Auteurs explicitement mentionnés → {authors}")
+            else:
+                authors = None
+                if intent.get("authors"):
+                    logging.info("🙅 Ignoré 'authors' renvoyé par le LLM (aucune mention explicite dans le message).")
 
             if not intent.get("summary"):
                 await thinking.edit(content="Pour le moment, je peux seulement résumer les discussions.")
@@ -273,7 +281,6 @@ async def on_message(message):
                 await thinking.edit(content="Je ne peux résumer que les discussions du salon sur lequel je suis appelée.")
                 return
 
-            authors = intent.get("authors")
             focus = intent.get("focus")
             sort_ascending = intent.get("ascending", False)
 
