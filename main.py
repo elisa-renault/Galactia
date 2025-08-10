@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from dateutil import parser as date_parser
 from ai_helpers import summary_intent_prompt, time_limit_range_prompt
 import logging
+import pytz
 
 # Chemin du fichier .env (par défaut ".env" si non précisé)
 env_file = os.getenv("ENV_FILE", ".env")
@@ -74,7 +75,8 @@ async def on_ready():
     logging.info(f"✅ Galactia is ready! Logged in as {bot.user} (ID: {bot.user.id})")
 
 def get_local_now():
-    return datetime.now()
+    tz = pytz.timezone("Europe/Paris")
+    return datetime.now(tz)
 
 def estimate_token_count(text):
     return int(len(text) / 4)  # estimation approximative OpenAI
@@ -114,8 +116,14 @@ async def parse_time_limit_to_datetime_range(time_limit_str):
         )
         raw = response.choices[0].message.content.strip()
         start_str, end_str = [s.strip() for s in raw.split(",")]
-        start = date_parser.parse(start_str).replace(tzinfo=None)
-        end = date_parser.parse(end_str).replace(tzinfo=None)
+        # Ajoute le fuseau si absent
+        tz = pytz.timezone("Europe/Paris")
+        start = date_parser.parse(start_str)
+        if start.tzinfo is None:
+            start = tz.localize(start)
+        end = date_parser.parse(end_str)
+        if end.tzinfo is None:
+            end = tz.localize(end)
 
         # 🛠️ Patch pour corriger "depuis" sans borne de fin explicite
         time_str = time_limit_str.lower()
@@ -135,7 +143,6 @@ async def parse_time_limit_to_datetime_range(time_limit_str):
 
         logging.info(f"📅 Dates retenues : start = {start}, end = {end}")
         return (start, end)
-
     except Exception as e:
         logging.info(f"⚠️ Time parsing error: {e}")
         return (now - timedelta(days=1), now)
@@ -274,7 +281,8 @@ async def on_message(message):
             start = None
             end = None
             limit = None
-            min_date = datetime(2024, 10, 15)
+            tz = pytz.timezone("Europe/Paris")
+            min_date = tz.localize(datetime(2024, 10, 15))
 
             fallback_notices = []
 
