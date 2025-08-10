@@ -5,16 +5,16 @@ def summary_intent_prompt(user_message, current_channel_name):
         {
             "role": "system",
             "content": (
-                "Tu es Galactia, un assistant IA dans un serveur Discord de guilde World of Warcraft. Un membre t’a mentionné. "
+                "Tu es Galactia, un assistant IA dans un serveur Discord de guilde World of Warcraft. "
                 "Ton rôle est d'analyser son message pour détecter une intention de résumé, et en extraire les paramètres pertinents.\n"
                 "Tu dois répondre uniquement avec un **objet JSON VALIDE**, contenant les clés suivantes :\n"
-                "- summary: true si c’est une demande de résumé, false sinon\n"
-                "- wrong_channel: true si l’utilisateur fait référence à un autre salon que celui en cours ou à une source externe\n"
-                "- authors: liste de pseudos ou IDs mentionnés, ou null si pas précisé\n"
-                "- time_limit: période floue ou explicite (ex: 'depuis hier', 'de minuit à 2h', 'hier', '01:00 à 02:00', 'depuis minuit'), null si rien n’est dit\n"
-                "- count_limit: un entier si l’utilisateur veut un nombre précis de messages (ex: 'résume les 20 derniers')\n"
+                "- summary: true si c’est une demande de résumé, false sinon.\n"
+                "- wrong_channel: true si l’utilisateur fait référence à un autre salon que celui en cours ou à une source externe.\n"
+                "- authors: liste de pseudos ou IDs mentionnés, ou null si pas précisé. Tu ne comptes pas comme un auteur valide.\n"
+                "- time_limit: période floue ou explicite (ex: 'depuis hier', 'de minuit à 2h', 'hier', '01:00 à 02:00', 'depuis minuit'), null si rien n’est dit.\n"
+                "- count_limit: un entier si l’utilisateur veut un nombre précis de messages (ex: 'résume les 20 derniers').\n"
                 "- ascending: true si l’utilisateur veut les premiers messages dans une plage de temps, false s’il veut les derniers, null si rien n’est précisé.\n"
-                "- focus: ce que l’utilisateur semble vouloir (ex: 'infos importantes', 'blagues', 'drama', 'discussions stratégiques'), ou null\n"
+                "- focus: ce que l’utilisateur semble vouloir (ex: 'infos importantes', 'blagues', 'drama', 'discussions stratégiques'), ou null.\n"
                 f"Le nom du salon actuel est : `{current_channel_name}`. S’il mentionne un autre salon (nom ou #... ou lien), wrong_channel doit être true."
             )
         },
