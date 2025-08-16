@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+from contextlib import AsyncExitStack
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from typing import Dict, List, Optional
@@ -142,7 +143,7 @@ class TwitchNotifier(commands.Cog):
     - Announces when a followed channel goes live, edits when it ends
     """
 
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: commands.Bot, session: aiohttp.ClientSession, exit_stack: AsyncExitStack):
         self.bot = bot
         self.twitch_client_id = os.getenv("TWITCH_CLIENT_ID")
         self.twitch_client_secret = os.getenv("TWITCH_CLIENT_SECRET")
@@ -150,7 +151,8 @@ class TwitchNotifier(commands.Cog):
         self.fallback_channel_id = int(os.getenv("TWITCH_ANNOUNCE_CHANNEL_ID", "0"))
         self._oauth_token: Optional[str] = None
         self._oauth_expire_ts: float = 0
-        self.session = aiohttp.ClientSession()
+        self.session = session
+        self._exit_stack = exit_stack
 
         if not self.twitch_client_id or not self.twitch_client_secret:
             logger.warning("Twitch credentials are missing; Twitch notifier will not start.")
@@ -160,10 +162,12 @@ class TwitchNotifier(commands.Cog):
 
     def cog_unload(self):
         """Stop the background poller and close HTTP session when the cog is unloaded."""
+        self.bot.loop.create_task(self._shutdown())
+
+    async def _shutdown(self):
         if self.poller.is_running():
             self.poller.cancel()
-        if not self.session.closed:
-            asyncio.create_task(self.session.close())
+        await self._exit_stack.aclose()
 
     # ==========================
     # Slash command group /twitch (admin-only)
@@ -730,8 +734,10 @@ async def setup(bot: commands.Bot):
     If DISCORD_GUILD_ID is set, register commands for that guild only (faster updates).
     Otherwise register globally.
     """
-    # 1) Add the cog
-    cog = TwitchNotifier(bot)
+    # 1) Add the cog with a managed HTTP session
+    exit_stack = AsyncExitStack()
+    session = await exit_stack.enter_async_context(aiohttp.ClientSession())
+    cog = TwitchNotifier(bot, session, exit_stack)
     await bot.add_cog(cog)
 
     # 2) (Re)register the /twitch group explicitly
