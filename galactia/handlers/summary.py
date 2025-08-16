@@ -55,8 +55,10 @@ async def fetch_valid_messages(
         )
         return match
 
-    raw_limit = 1000
-    history = channel.history(limit=raw_limit, after=start, before=end)
+    raw_limit = limit if limit is not None else 1000
+    history = channel.history(
+        limit=min(limit or raw_limit, raw_limit), after=start, before=end
+    )
     messages = []
     async for msg in history:
         if not msg.content:
@@ -74,7 +76,7 @@ async def fetch_valid_messages(
     logging.info(f"✅ Valid messages kept: {len(messages)}")
 
     messages.sort(key=lambda m: m.created_at, reverse=not sort_ascending)
-    return messages[:limit] if limit else messages
+    return messages
 
 
 async def generate_summary(messages, create_chat_completion, focus: Optional[str] = None):
