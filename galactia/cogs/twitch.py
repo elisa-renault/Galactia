@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 from contextlib import AsyncExitStack
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
@@ -123,8 +124,21 @@ def ensure_db():
 def load_streams() -> List[Dict]:
     """Load the entire Twitch follow list (and cached state) from disk."""
     ensure_db()
-    with open(TWITCH_STREAMS_DB_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(TWITCH_STREAMS_DB_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        logger.warning(
+            "Failed to decode JSON from %s; returning empty list", TWITCH_STREAMS_DB_PATH
+        )
+        # Optionally back up the corrupted file for debugging
+        try:
+            backup_path = TWITCH_STREAMS_DB_PATH + ".bak"
+            shutil.copy(TWITCH_STREAMS_DB_PATH, backup_path)
+            logger.warning("Backed up corrupted JSON to %s", backup_path)
+        except Exception as e:  # pragma: no cover - backup errors shouldn't stop execution
+            logger.warning("Failed to back up corrupted JSON file: %s", e)
+        return []
 
 
 def save_streams(data: List[Dict]):
