@@ -12,6 +12,7 @@ import aiohttp
 import discord
 from discord import app_commands, Permissions
 from discord.ext import commands, tasks
+from galactia.settings import settings
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -159,10 +160,10 @@ class TwitchNotifier(commands.Cog):
 
     def __init__(self, bot: commands.Bot, session: aiohttp.ClientSession, exit_stack: AsyncExitStack):
         self.bot = bot
-        self.twitch_client_id = os.getenv("TWITCH_CLIENT_ID")
-        self.twitch_client_secret = os.getenv("TWITCH_CLIENT_SECRET")
-        self.check_interval = int(os.getenv("TWITCH_CHECK_INTERVAL", "60"))
-        self.fallback_channel_id = int(os.getenv("TWITCH_ANNOUNCE_CHANNEL_ID", "0"))
+        self.twitch_client_id = settings.twitch_client_id
+        self.twitch_client_secret = settings.twitch_client_secret
+        self.check_interval = settings.twitch_check_interval
+        self.fallback_channel_id = settings.twitch_announce_channel_id or 0
         self._oauth_token: Optional[str] = None
         self._oauth_expire_ts: float = 0
         self.session = session
@@ -774,7 +775,7 @@ async def setup(bot: commands.Bot):
 
     # 2) (Re)register the /twitch group explicitly
     try:
-        guild_id = os.getenv("DISCORD_GUILD_ID")
+        guild_id = settings.discord_guild_id
         if guild_id:
             guild = discord.Object(id=int(guild_id))
             # Remove any previous definition under the same name for that guild

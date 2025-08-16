@@ -2,6 +2,8 @@ discord.py
 openai
 tiktoken
 python-dotenv
+pydantic
+pydantic-settings
 python-dateutil
 pytz
 aiohttp
