@@ -1,6 +1,6 @@
 import re
 
-def summary_intent_prompt(user_message, current_channel_name):
+def intent_prompt(user_message, current_channel_name):
     return [
         {
             "role": "system",
