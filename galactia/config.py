@@ -9,10 +9,7 @@ from dotenv import load_dotenv
 
 # Load environment variables
 env_file = os.getenv("ENV_FILE", ".env")
-print(f"📦 Loading env from {env_file}")
 load_dotenv(dotenv_path=env_file)
-
-print(f"🚀 Starting Galactia in {os.getenv('ENV_MODE', 'undefined')} mode...")
 
 # Configure logging
 log_dir = "logs"
@@ -30,6 +27,12 @@ logging.basicConfig(
     ],
 )
 
+logging.info("📦 Loading env from %s", env_file)
+logging.info(
+    "🚀 Starting Galactia in %s mode...",
+    os.getenv("ENV_MODE", "undefined"),
+)
+
 # Discord intents
 intents = discord.Intents.default()
 intents.message_content = True
@@ -37,7 +40,8 @@ intents.members = True
 
 # External service tokens
 openai.api_key = os.getenv("OPENAI_API_KEY")
-DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = os.getenv("DISCORD_GUILD_ID")
 
 __all__ = ["intents", "DISCORD_TOKEN", "GUILD_ID"]
+
