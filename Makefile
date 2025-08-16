@@ -1,6 +1,6 @@
 dev:
 	pip install -r requirements.txt
-	ENV_FILE=.env.dev python main.py
+	ENV_FILE=.env.dev python -m galactia.main
 prod:
 	venv/bin/pip install -r requirements.txt
-	ENV_FILE=.env.prod venv/bin/python main.py
+	ENV_FILE=.env.prod venv/bin/python -m galactia.main
