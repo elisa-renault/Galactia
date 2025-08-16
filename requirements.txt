@@ -3,3 +3,5 @@ openai
 python-dotenv
 python-dateutil
 pytz
+aiohttp
+tzdata

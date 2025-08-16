@@ -12,10 +12,7 @@ import pytz
 import asyncio
 import re
 
-# ========================
-# Discord constants
-# ========================
-MAX_DISCORD = 2000  # strict Discord message limit (characters)
+MAX_DISCORD = 2000
 
 def fit_for_discord(s: str, hard_limit: int = MAX_DISCORD, target: int = 1900) -> str:
     """
@@ -27,18 +24,16 @@ def fit_for_discord(s: str, hard_limit: int = MAX_DISCORD, target: int = 1900) -
         return ""
     if len(s) <= hard_limit:
         return s
-
-    # soft cut
+    
     cut = s[:target]
-    # find a neat cut point (last \n within ~300 chars)
     nl = cut.rfind("\n")
+
     if nl != -1 and nl >= target - 300:
         cut = cut[:nl]
 
     cut = cut.rstrip()
     suffix = "\n… (résumé tronqué)"
     if len(cut) + len(suffix) > hard_limit:
-        # hard cut as last resort
         cut = cut[: hard_limit - len(suffix)]
     return cut + suffix
 
@@ -48,9 +43,6 @@ def chunk_text(s: str, size: int = 1900):
         return [""]
     return [s[i:i+size] for i in range(0, len(s), size)]
 
-# ========================
-# Env & logs
-# ========================
 env_file = os.getenv("ENV_FILE", ".env")
 print(f"📦 Loading env from {env_file}")
 load_dotenv(dotenv_path=env_file)
@@ -80,16 +72,10 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 openai.api_key = os.getenv("OPENAI_API_KEY")
 DISCORD_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
-# ========================
-# OpenAI helpers (non-blocking)
-# ========================
 async def create_chat_completion(**params):
     """Run OpenAI call in a background thread to avoid blocking Discord's event loop."""
     return await asyncio.to_thread(openai.chat.completions.create, **params)
 
-# ========================
-# Sanitize
-# ========================
 async def sanitize_user_prompt_with_llm(text):
     SUSPICIOUS = re.compile(
         r"(?i)\b("
@@ -118,17 +104,14 @@ async def sanitize_user_prompt_with_llm(text):
         )
         cleaned = (resp.choices[0].message.content or "").strip()
 
-        # Empty & suspicious → block
         if not cleaned and suspicious(text):
             logging.info("⚠️ Sanitize: fully suspicious input → blocked.")
             return ""
 
-        # Empty but not suspicious → fallback original
         if not cleaned:
             logging.info("🧽 Sanitize: fallback_original_empty (LLM returned empty, not suspicious)")
             return text
 
-        # Aggressive removal >30% but not suspicious → fallback original
         if len(cleaned) < 0.7 * len(text) and not suspicious(text):
             logging.info("🧽 Sanitize: fallback_original_aggressive (>30% removed, not suspicious)")
             return text
@@ -146,27 +129,21 @@ async def sanitize_user_prompt_with_llm(text):
         logging.info(f"🧽 Sanitize: error → fallback_original ({e})")
         return text
 
-# ========================
-# Bot ready
-# ========================
 @bot.event
 async def on_ready():
     logging.info(f"✅ Galactia ready! Logged in as {bot.user} (ID: {bot.user.id})")
 
-# ========================
-# Helpers
-# ========================
 def get_local_now():
     tz = pytz.timezone("Europe/Paris")
     return datetime.now(tz)
 
 def estimate_token_count(text):
-    return int(len(text) / 4)  # rough OpenAI token estimate
+    return int(len(text) / 4)
 
 def _norm_person_name(s: str) -> str:
     """Normalize a free-text name ('d’Elsia', quotes, @...) for matching."""
     s = s.strip()
-    s = re.sub(r"^(d['’]|l['’])", "", s, flags=re.IGNORECASE)  # d’Elsia / l’Admin
+    s = re.sub(r"^(d['’]|l['’])", "", s, flags=re.IGNORECASE) 
     s = s.lstrip("@#<>'\"` ").rstrip(">'\"` ")
     return s.strip()
 
@@ -178,7 +155,6 @@ def resolve_llm_authors_to_ids(names, channel, bot_id):
     if not names:
         return None
 
-    # build a local lookup (case-insensitive) from channel members
     candidates = {}
     for m in getattr(channel, "members", []):
         if m.bot:
@@ -190,24 +166,17 @@ def resolve_llm_authors_to_ids(names, channel, bot_id):
     for raw in names:
         n = _norm_person_name(str(raw))
         key = n.lower()
-        # exact match
         if key in candidates:
             mid = candidates[key]
             if mid != str(bot_id):
                 resolved.append(mid)
             continue
-        # fallback: unique startswith
         hits = [v for k, v in candidates.items() if k.startswith(key)]
         if len(hits) == 1 and hits[0] != str(bot_id):
             resolved.append(hits[0])
-
-    # dedupe
     resolved = list(dict.fromkeys(resolved))
     return resolved or None
 
-# ========================
-# Intent
-# ========================
 async def detect_summary_intent(user_message, channel_name):
     try:
         user_message_clean = await sanitize_user_prompt_with_llm(user_message)
@@ -225,9 +194,6 @@ async def detect_summary_intent(user_message, channel_name):
         logging.info(f"❌ Intent detection error: {e}")
         return '{"summary": false}'
 
-# ========================
-# Time parser
-# ========================
 async def parse_time_limit_to_datetime_range(time_limit_str):
     now = get_local_now()
     logging.info(f"🕒 Current time (Europe/Paris): {now}")
@@ -256,7 +222,6 @@ async def parse_time_limit_to_datetime_range(time_limit_str):
         if end.tzinfo is None:
             end = tz.localize(end)
 
-        # manual fix for "depuis ..." without explicit end
         time_str = time_limit_str.lower()
         has_explicit_range = (
             "jusqu" in time_str
@@ -278,9 +243,6 @@ async def parse_time_limit_to_datetime_range(time_limit_str):
         logging.info(f"⚠️ Time parsing error: {e}")
         return (now - timedelta(days=1), now)
 
-# ========================
-# Fetch messages
-# ========================
 async def fetch_valid_messages(channel, start=None, end=None, limit=None, authors=None, sort_ascending=False):
     def is_author_allowed(author_display_name, author_id, authors_list):
         if not authors_list:
@@ -300,7 +262,6 @@ async def fetch_valid_messages(channel, start=None, end=None, limit=None, author
             continue
         if msg.author.bot:
             continue
-        # ignore messages that mention the bot (commands)
         if bot.user in msg.mentions:
             continue
         if authors and not is_author_allowed(msg.author.display_name, str(msg.author.id), authors):
@@ -312,15 +273,11 @@ async def fetch_valid_messages(channel, start=None, end=None, limit=None, author
     messages.sort(key=lambda m: m.created_at, reverse=not sort_ascending)
     return messages[:limit] if limit else messages
 
-# ========================
-# Generate summary (≤ 2000 chars guaranteed)
-# ========================
 async def generate_summary(messages, focus=None):
     try:
         if not messages:
             return "Aucun message pertinent à résumer."
-        
-        # chronological order
+
         messages.sort(key=lambda m: m.created_at)
 
         lines = [
@@ -328,12 +285,10 @@ async def generate_summary(messages, focus=None):
             for msg in messages
         ]
 
-        # keep prompt size reasonable
         token_limit = 12000
         selected_lines = []
         total_tokens = 0
 
-        # keep most recent compatible lines
         for line in lines:
             tokens = estimate_token_count(line)
             if total_tokens + tokens > token_limit:
@@ -350,7 +305,6 @@ async def generate_summary(messages, focus=None):
         else:
             logging.info("⚠️ No lines kept for summary (0 tokens)")
 
-        # hard length constraint for model output
         instructions = [
             "Tu es Galactia, un assistant IA pour la guilde Les Galactiques.",
             "Tu dois générer un résumé clair des messages reçus.",
@@ -378,16 +332,12 @@ async def generate_summary(messages, focus=None):
         )
         raw_summary = (resp.choices[0].message.content or "").strip()
 
-        # safe post-processing for Discord limit
         safe_summary = fit_for_discord(raw_summary, hard_limit=MAX_DISCORD, target=1900)
         return safe_summary
 
     except Exception as e:
         return f"❌ Résumé échoué : {str(e)}"
 
-# ========================
-# on_message
-# ========================
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
@@ -402,13 +352,11 @@ async def on_message(message):
         try:
             intent = json.loads(intent_json)
 
-            # 👉 Build authors filter
             requested_authors = extract_authors_from_message(message, bot.user.id)  # via explicit @mentions / <@id>
             if requested_authors:
                 authors = requested_authors
                 logging.info(f"👥 Authors (explicit mentions) → {authors}")
             else:
-                # use LLM-detected free-text authors (e.g., "les messages d’Elsia") if any
                 llm_authors = intent.get("authors") or None
                 if llm_authors:
                     resolved = resolve_llm_authors_to_ids(llm_authors, message.channel, bot.user.id)
@@ -441,7 +389,6 @@ async def on_message(message):
 
             fallback_notices = []
 
-            # 🔍 Time range (with 24h fallback)
             if intent.get("time_limit"):
                 start, end = await parse_time_limit_to_datetime_range(intent["time_limit"])
                 logging.info(f"📅 time_limit parsed → {start} → {end}")
@@ -490,11 +437,9 @@ async def on_message(message):
             summary = await generate_summary(messages, focus=focus)
 
             if fallback_notices:
-                # prefix notices, then refit to ensure 2000 limit
                 summary = "\n".join(fallback_notices) + "\n\n" + summary
                 summary = fit_for_discord(summary, hard_limit=MAX_DISCORD, target=1900)
 
-            # safe send (chunk as a last resort)
             try:
                 safe_first = fit_for_discord(summary, hard_limit=MAX_DISCORD, target=1900)
                 if len(safe_first) <= MAX_DISCORD:
@@ -505,7 +450,6 @@ async def on_message(message):
                     for c in chunks[1:]:
                         await message.channel.send(c)
             except Exception:
-                # if edit fails (permissions), send as new messages
                 chunks = chunk_text(summary, size=1900)
                 await message.channel.send(chunks[0])
                 for c in chunks[1:]:
@@ -516,5 +460,39 @@ async def on_message(message):
             await thinking.edit(content="Je n’ai pas pu résumer la conversation. Une erreur est survenue.")
 
     await bot.process_commands(message)
+
+async def _setup_hook():
+    guild_id = os.getenv("DISCORD_GUILD_ID")
+
+    try:
+        if guild_id:
+            guild = discord.Object(id=int(guild_id))
+            bot.tree.clear_commands(guild=guild)
+            await bot.tree.sync(guild=guild)
+            logging.info("Purged existing slash commands (guild=%s).", guild_id)
+        else:
+            bot.tree.clear_commands()
+            await bot.tree.sync()
+            logging.info("Purged existing global slash commands.")
+    except Exception as e:
+        logging.exception("Failed to purge commands: %s", e)
+
+    try:
+        await bot.load_extension("cogs.twitch")
+        logging.info("Loaded extension: cogs.twitch")
+    except Exception as e:
+        logging.exception("Failed loading cogs.twitch: %s", e)
+
+    try:
+        if guild_id:
+            await bot.tree.sync(guild=discord.Object(id=int(guild_id)))
+            logging.info("Slash commands synced (guild=%s).", guild_id)
+        else:
+            await bot.tree.sync()
+            logging.info("Slash commands synced (global).")
+    except Exception as e:
+        logging.exception("Failed to sync commands: %s", e)
+
+bot.setup_hook = _setup_hook
 
 bot.run(DISCORD_TOKEN)
