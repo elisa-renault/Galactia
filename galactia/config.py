@@ -44,4 +44,3 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = os.getenv("DISCORD_GUILD_ID")
 
 __all__ = ["intents", "DISCORD_TOKEN", "GUILD_ID"]
-
