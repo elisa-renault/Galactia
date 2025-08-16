@@ -209,6 +209,141 @@ def resolve_llm_authors_to_ids(names, channel, bot_id):
     return resolved or None
 
 
+async def parse_intent_and_authors(message):
+    intent_json = await detect_summary_intent(
+        message.content, message.channel.name
+    )
+    try:
+        intent = json.loads(intent_json)
+    except Exception as e:
+        logging.info(f"❌ Intent JSON error: {e}")
+        intent = {"summary": False}
+
+    requested_authors = extract_authors_from_message(message, bot.user.id)
+    if requested_authors:
+        authors = requested_authors
+        logging.info(f"👥 Authors (explicit mentions) → {authors}")
+    else:
+        llm_authors = intent.get("authors") or None
+        if llm_authors:
+            resolved = resolve_llm_authors_to_ids(
+                llm_authors, message.channel, bot.user.id
+            )
+            if resolved:
+                authors = resolved
+                logging.info(
+                    f"👥 Authors resolved from LLM → {llm_authors} → {authors}"
+                )
+            else:
+                authors = None
+                logging.info("🙅 LLM authors ignored (no matching members).")
+        else:
+            authors = None
+
+    return intent, authors
+
+
+async def handle_time_range(intent):
+    now = get_local_now()
+    tz = pytz.timezone("Europe/Paris")
+    min_date = tz.localize(datetime(2024, 10, 15))
+    fallback_notices = []
+
+    if intent.get("time_limit"):
+        start, end = await parse_time_limit_to_datetime_range(intent["time_limit"])
+        logging.info(f"📅 time_limit parsed → {start} → {end}")
+        if start < min_date:
+            logging.info(f"⛔ start < 2024-10-15 → adjusted to {min_date}")
+            fallback_notices.append(
+                "⚠️ La date de début a été ajustée au 15/10/2024 (limite minimale)."
+            )
+            start = min_date
+    else:
+        end = now
+        start = now - timedelta(days=1)
+        logging.info("📅 No time_limit → fallback to last 24h")
+        fallback_notices.append(
+            "ℹ️ Aucun intervalle de temps précisé → résumé sur les dernières 24h."
+        )
+
+    if intent.get("count_limit"):
+        raw_count = int(intent["count_limit"])
+        if raw_count > 500:
+            logging.info("⛔ count_limit > 500 → reduced to 500")
+            fallback_notices.append(
+                "⚠️ Le nombre de messages demandé a été réduit à 500 (maximum autorisé)."
+            )
+        limit = min(raw_count, 500)
+        logging.info(f"🔢 count_limit → {limit}")
+    else:
+        if intent.get("time_limit"):
+            limit = 500
+            logging.info(
+                "🔢 No count_limit but time_limit provided → fallback to 500 messages max"
+            )
+            fallback_notices.append(
+                "ℹ️ Aucun nombre de messages précisé → récupération de 500 messages max dans la plage de temps."
+            )
+        else:
+            limit = 100
+            logging.info(
+                "🔢 No count_limit nor time_limit → fallback to last 100 messages"
+            )
+            fallback_notices.append(
+                "ℹ️ Aucun nombre de messages ni plage de temps précisé → résumé sur les 100 derniers messages."
+            )
+
+    return start, end, limit, fallback_notices
+
+
+async def retrieve_messages(
+    bot, channel, start, end, limit, authors, sort_ascending
+):
+    return await fetch_valid_messages(
+        bot,
+        channel,
+        start=start,
+        end=end,
+        limit=limit,
+        authors=authors,
+        sort_ascending=sort_ascending,
+    )
+
+
+async def send_summary_response(
+    thinking, channel, messages, start, end, focus, fallback_notices
+):
+    if not messages:
+        await thinking.edit(
+            content=(
+                f"Aucun message trouvé entre {start.strftime('%d/%m/%Y %H:%M')} et {end.strftime('%d/%m/%Y %H:%M')}"
+            )
+        )
+        return
+
+    summary = await generate_summary(messages, create_chat_completion, focus=focus)
+    if fallback_notices:
+        summary = "\n".join(fallback_notices) + "\n\n" + summary
+        summary = fit_for_discord(summary, hard_limit=MAX_DISCORD, target=1900)
+
+    try:
+        safe_first = fit_for_discord(
+            summary, hard_limit=MAX_DISCORD, target=1900
+        )
+        if len(safe_first) <= MAX_DISCORD:
+            await thinking.edit(content=safe_first)
+        else:
+            chunks = chunk_text(summary, size=1900)
+            await thinking.edit(content=chunks[0])
+            for c in chunks[1:]:
+                await channel.send(c)
+    except Exception:
+        chunks = chunk_text(summary, size=1900)
+        await channel.send(chunks[0])
+        for c in chunks[1:]:
+            await channel.send(c)
+
+
 @bot.event
 async def on_ready():
     logging.info(
@@ -224,162 +359,34 @@ async def on_message(message):
     if bot.user.mentioned_in(message):
         logging.info(f"📨 Mention received: {message.content}")
         thinking = await message.channel.send("⏳ Galactia réfléchit...")
+        intent, authors = await parse_intent_and_authors(message)
 
-        intent_json = await detect_summary_intent(
-            message.content, message.channel.name
+        if not intent.get("summary"):
+            await thinking.edit(
+                content="Pour le moment, je peux seulement résumer les discussions."
+            )
+            return
+
+        if intent.get("wrong_channel"):
+            await thinking.edit(
+                content="Je ne peux résumer que les discussions du salon sur lequel je suis appelée."
+            )
+            return
+
+        focus = intent.get("focus")
+        sort_ascending = intent.get("ascending", False)
+        start, end, limit, fallback_notices = await handle_time_range(intent)
+        logging.info(
+            f"🔧 Summary config: start={start}, end={end}, limit={limit}, authors={authors or 'ALL'}, ascending={sort_ascending}"
+        )
+        messages = await retrieve_messages(
+            bot, message.channel, start, end, limit, authors, sort_ascending
         )
 
         try:
-            intent = json.loads(intent_json)
-
-            requested_authors = extract_authors_from_message(
-                message, bot.user.id
+            await send_summary_response(
+                thinking, message.channel, messages, start, end, focus, fallback_notices
             )
-            if requested_authors:
-                authors = requested_authors
-                logging.info(f"👥 Authors (explicit mentions) → {authors}")
-            else:
-                llm_authors = intent.get("authors") or None
-                if llm_authors:
-                    resolved = resolve_llm_authors_to_ids(
-                        llm_authors, message.channel, bot.user.id
-                    )
-                    if resolved:
-                        authors = resolved
-                        logging.info(
-                            f"👥 Authors resolved from LLM → {llm_authors} → {authors}"
-                        )
-                    else:
-                        authors = None
-                        logging.info(
-                            "🙅 LLM authors ignored (no matching members)."
-                        )
-                else:
-                    authors = None
-
-            if not intent.get("summary"):
-                await thinking.edit(
-                    content="Pour le moment, je peux seulement résumer les discussions."
-                )
-                return
-
-            if intent.get("wrong_channel"):
-                await thinking.edit(
-                    content="Je ne peux résumer que les discussions du salon sur lequel je suis appelée."
-                )
-                return
-
-            focus = intent.get("focus")
-            sort_ascending = intent.get("ascending", False)
-
-            now = get_local_now()
-            start = None
-            end = None
-            limit = None
-            tz = pytz.timezone("Europe/Paris")
-            min_date = tz.localize(datetime(2024, 10, 15))
-
-            fallback_notices = []
-
-            if intent.get("time_limit"):
-                start, end = await parse_time_limit_to_datetime_range(
-                    intent["time_limit"]
-                )
-                logging.info(
-                    f"📅 time_limit parsed → {start} → {end}"
-                )
-                if start < min_date:
-                    logging.info(
-                        f"⛔ start < 2024-10-15 → adjusted to {min_date}"
-                    )
-                    fallback_notices.append(
-                        "⚠️ La date de début a été ajustée au 15/10/2024 (limite minimale)."
-                    )
-                    start = min_date
-            else:
-                end = now
-                start = now - timedelta(days=1)
-                logging.info("📅 No time_limit → fallback to last 24h")
-                fallback_notices.append(
-                    "ℹ️ Aucun intervalle de temps précisé → résumé sur les dernières 24h."
-                )
-
-            if intent.get("count_limit"):
-                raw_count = int(intent["count_limit"])
-                if raw_count > 500:
-                    logging.info(f"⛔ count_limit > 500 → reduced to 500")
-                    fallback_notices.append(
-                        "⚠️ Le nombre de messages demandé a été réduit à 500 (maximum autorisé)."
-                    )
-                limit = min(raw_count, 500)
-                logging.info(f"🔢 count_limit → {limit}")
-            else:
-                if intent.get("time_limit"):
-                    limit = 500
-                    logging.info(
-                        "🔢 No count_limit but time_limit provided → fallback to 500 messages max"
-                    )
-                    fallback_notices.append(
-                        "ℹ️ Aucun nombre de messages précisé → récupération de 500 messages max dans la plage de temps."
-                    )
-                else:
-                    limit = 100
-                    logging.info(
-                        "🔢 No count_limit nor time_limit → fallback to last 100 messages"
-                    )
-                    fallback_notices.append(
-                        "ℹ️ Aucun nombre de messages ni plage de temps précisé → résumé sur les 100 derniers messages."
-                    )
-
-            logging.info(
-                f"🔧 Summary config: start={start}, end={end}, limit={limit}, authors={authors or 'ALL'}, ascending={sort_ascending}"
-            )
-
-            messages = await fetch_valid_messages(
-                bot,
-                message.channel,
-                start=start,
-                end=end,
-                limit=limit,
-                authors=authors,
-                sort_ascending=sort_ascending,
-            )
-
-            if not messages:
-                await thinking.edit(
-                    content=(
-                        f"Aucun message trouvé entre {start.strftime('%d/%m/%Y %H:%M')} et {end.strftime('%d/%m/%Y %H:%M')}."
-                    )
-                )
-                return
-
-            summary = await generate_summary(
-                messages, create_chat_completion, focus=focus
-            )
-
-            if fallback_notices:
-                summary = "\n".join(fallback_notices) + "\n\n" + summary
-                summary = fit_for_discord(
-                    summary, hard_limit=MAX_DISCORD, target=1900
-                )
-
-            try:
-                safe_first = fit_for_discord(
-                    summary, hard_limit=MAX_DISCORD, target=1900
-                )
-                if len(safe_first) <= MAX_DISCORD:
-                    await thinking.edit(content=safe_first)
-                else:
-                    chunks = chunk_text(summary, size=1900)
-                    await thinking.edit(content=chunks[0])
-                    for c in chunks[1:]:
-                        await message.channel.send(c)
-            except Exception:
-                chunks = chunk_text(summary, size=1900)
-                await message.channel.send(chunks[0])
-                for c in chunks[1:]:
-                    await message.channel.send(c)
-
         except Exception as e:
             logging.info(f"❌ Summary flow error: {e}")
             await thinking.edit(
