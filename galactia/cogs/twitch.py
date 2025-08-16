@@ -154,6 +154,11 @@ class TwitchNotifier(commands.Cog):
         self.session = session
         self._exit_stack = exit_stack
 
+        # Load stream metadata once and set up synchronization primitives
+        self.streams: List[Dict] = load_streams()
+        self._streams_lock = asyncio.Lock()
+        self._streams_changed = False
+
         if not self.twitch_client_id or not self.twitch_client_secret:
             logger.warning("Twitch credentials are missing; Twitch notifier will not start.")
         else:
@@ -168,6 +173,13 @@ class TwitchNotifier(commands.Cog):
         if self.poller.is_running():
             self.poller.cancel()
         await self._exit_stack.aclose()
+
+    async def persist_streams(self):
+        """Persist self.streams to disk if they were modified."""
+        async with self._streams_lock:
+            if self._streams_changed:
+                save_streams(self.streams)
+                self._streams_changed = False
 
     # ==========================
     # Slash command group /twitch (admin-only)
@@ -197,27 +209,31 @@ class TwitchNotifier(commands.Cog):
         if not isinstance(channel, discord.TextChannel):
             return await interaction.response.send_message("Please pick a text channel.", ephemeral=True)
 
-        data = load_streams()
         login = twitch_login.strip().lower()
-        if any(s for s in data if s["login"] == login and s["channel_id"] == channel.id):
+        async with self._streams_lock:
+            if any(s for s in self.streams if s["login"] == login and s["channel_id"] == channel.id):
+                exists = True
+            else:
+                self.streams.append({
+                    "login": login,
+                    "channel_id": channel.id,
+                    "role_id": role.id if role else None,
+                    "live": False,
+                    "last_started_at": None,
+                    "last_message_id": None,
+                    "peak_viewers": 0,
+                    "last_game_id": None,
+                    "last_box_art_url": None,
+                    "last_display_name": None,
+                    "last_stream_title": None
+                })
+                self._streams_changed = True
+                exists = False
+        if exists:
             return await interaction.response.send_message(
                 f"**{login}** is already followed in {channel.mention}.", ephemeral=True
             )
-
-        data.append({
-            "login": login,
-            "channel_id": channel.id,
-            "role_id": role.id if role else None,
-            "live": False,
-            "last_started_at": None,
-            "last_message_id": None,
-            "peak_viewers": 0,
-            "last_game_id": None,
-            "last_box_art_url": None,
-            "last_display_name": None,
-            "last_stream_title": None
-        })
-        save_streams(data)
+        await self.persist_streams()
         await interaction.response.send_message(
             f"✅ I will follow **{login}** and announce lives in {channel.mention} "
             + (f"(ping {role.mention})" if role else ""),
@@ -226,7 +242,8 @@ class TwitchNotifier(commands.Cog):
 
     @twitch_group.command(name="list", description="List followed Twitch channels")
     async def list_streams(self, interaction: discord.Interaction):
-        data = load_streams()
+        async with self._streams_lock:
+            data = list(self.streams)
         if not data:
             return await interaction.response.send_message("No follows yet.", ephemeral=True)
 
@@ -247,12 +264,14 @@ class TwitchNotifier(commands.Cog):
     @app_commands.describe(twitch_login="Twitch login to remove")
     async def twitch_remove(self, interaction: discord.Interaction, twitch_login: str):
         """Remove any follow entries for the given Twitch login."""
-        data = load_streams()
         login = twitch_login.strip().lower()
-        before = len(data)
-        data = [s for s in data if s["login"] != login]
-        save_streams(data)
-        removed = before - len(data)
+        async with self._streams_lock:
+            before = len(self.streams)
+            self.streams = [s for s in self.streams if s["login"] != login]
+            removed = before - len(self.streams)
+            if removed:
+                self._streams_changed = True
+        await self.persist_streams()
         await interaction.response.send_message(
             f"🗑️ Removed **{removed}** follow(s) for **{login}**." if removed else f"No follow found for **{login}**.",
             ephemeral=False
@@ -262,52 +281,54 @@ class TwitchNotifier(commands.Cog):
     @app_commands.describe(twitch_login="A previously followed Twitch login")
     async def twitch_test_online(self, interaction: discord.Interaction, twitch_login: str):
         """Simulate a LIVE stream announcement for testing."""
-        data = load_streams()
         login = twitch_login.strip().lower()
-        item = next((s for s in data if s["login"] == login), None)
-        if not item:
-            return await interaction.response.send_message("Channel not followed yet.", ephemeral=True)
+        async with self._streams_lock:
+            item = next((s for s in self.streams if s["login"] == login), None)
+            if not item:
+                return await interaction.response.send_message("Channel not followed yet.", ephemeral=True)
 
-        fake = {
-            "user_login": login,
-            "user_name": item.get("last_display_name") or login,
-            "title": "Test stream",
-            "game_name": "Testing",
-            "viewer_count": 123,
-            "thumbnail_url": f"https://static-cdn.jtvnw.net/previews-ttv/live_user_{login}-{{width}}x{{height}}.jpg",
-            "language": "fr",
-            "started_at": datetime.utcnow().isoformat() + "Z",
-            "game_id": item.get("last_game_id"),
-        }
+            fake = {
+                "user_login": login,
+                "user_name": item.get("last_display_name") or login,
+                "title": "Test stream",
+                "game_name": "Testing",
+                "viewer_count": 123,
+                "thumbnail_url": f"https://static-cdn.jtvnw.net/previews-ttv/live_user_{login}-{{width}}x{{height}}.jpg",
+                "language": "fr",
+                "started_at": datetime.utcnow().isoformat() + "Z",
+                "game_id": item.get("last_game_id"),
+            }
 
-        # Initialize on-state
-        item["live"] = True
-        item["last_started_at"] = fake["started_at"]
-        item["last_stream_title"] = fake["title"]
-        item["last_display_name"] = fake["user_name"]
-        item["peak_viewers"] = int(fake.get("viewer_count") or 0)
+            # Initialize on-state
+            item["live"] = True
+            item["last_started_at"] = fake["started_at"]
+            item["last_stream_title"] = fake["title"]
+            item["last_display_name"] = fake["user_name"]
+            item["peak_viewers"] = int(fake.get("viewer_count") or 0)
 
-        await self._announce_live(fake, item, interaction.guild)
-        save_streams(data)
+            await self._announce_live(fake, item, interaction.guild)
+            self._streams_changed = True
+        await self.persist_streams()
         await interaction.response.send_message("✅ Test LIVE sent.", ephemeral=True)
 
     @twitch_group.command(name="test_offline", description="Simulate end of live (edits to OFFLINE)")
     @app_commands.describe(twitch_login="A previously followed Twitch login")
     async def twitch_test_offline(self, interaction: discord.Interaction, twitch_login: str):
         """Simulate editing a previous LIVE message into an OFFLINE summary."""
-        data = load_streams()
         login = twitch_login.strip().lower()
-        item = next((s for s in data if s["login"] == login), None)
-        if not item:
-            return await interaction.response.send_message("Channel not followed yet.", ephemeral=True)
+        async with self._streams_lock:
+            item = next((s for s in self.streams if s["login"] == login), None)
+            if not item:
+                return await interaction.response.send_message("Channel not followed yet.", ephemeral=True)
 
-        if not item.get("last_started_at"):
-            item["last_started_at"] = (datetime.utcnow()).isoformat() + "Z"
+            if not item.get("last_started_at"):
+                item["last_started_at"] = (datetime.utcnow()).isoformat() + "Z"
 
-        item["live"] = False
-        save_streams(data)
+            item["live"] = False
+            await self._edit_to_stream_ended(item, interaction.guild)
+            self._streams_changed = True
 
-        await self._edit_to_stream_ended(item, interaction.guild)
+        await self.persist_streams()
         await interaction.response.send_message("✅ Test OFFLINE edited/sent.", ephemeral=True)
 
     # =========
@@ -324,11 +345,10 @@ class TwitchNotifier(commands.Cog):
         if not self.twitch_client_id or not self.twitch_client_secret:
             return
 
-        data = load_streams()
-        if not data:
-            return
-
-        logins = list({s["login"].lower() for s in data})
+        async with self._streams_lock:
+            if not self.streams:
+                return
+            logins = list({s["login"].lower() for s in self.streams})
         try:
             live_streams = await self._get_streams_by_logins(logins)
         except Exception as e:
@@ -338,78 +358,82 @@ class TwitchNotifier(commands.Cog):
         live_map = {s["user_login"].lower(): s for s in live_streams}
         changed = False
 
-        for item in data:
-            login = item["login"].lower()
-            live_obj = live_map.get(login)
+        async with self._streams_lock:
+            for item in self.streams:
+                login = item["login"].lower()
+                live_obj = live_map.get(login)
 
-            if live_obj and not item.get("live"):
-                # OFF -> ON : send announcement and cache metadata
-                try:
-                    guild = self.bot.get_guild(self._first_guild_id())
-                    await self._announce_live(live_obj, item, guild)
-                    item["live"] = True
-                    item["last_display_name"] = live_obj.get("user_name") or login
-                    item["last_stream_title"] = live_obj.get("title") or "—"
-                    item["last_started_at"] = live_obj.get("started_at")
-                    item["peak_viewers"] = int(live_obj.get("viewer_count") or 0)
-                    item["last_game_id"] = live_obj.get("game_id") or None
-                    item["last_game_name"] = live_obj.get("game_name") or "—"
-
-                    # Cache box art
+                if live_obj and not item.get("live"):
+                    # OFF -> ON : send announcement and cache metadata
                     try:
-                        box = await self._get_box_art_url_by_game_id(item["last_game_id"])
-                        if box:
-                            item["last_box_art_url"] = box  # keep {width}x{height} placeholders
-                    except Exception as e:
-                        logger.warning("Box art fetch failed for %s: %s", login, e)
+                        guild = self.bot.get_guild(self._first_guild_id())
+                        await self._announce_live(live_obj, item, guild)
+                        item["live"] = True
+                        item["last_display_name"] = live_obj.get("user_name") or login
+                        item["last_stream_title"] = live_obj.get("title") or "—"
+                        item["last_started_at"] = live_obj.get("started_at")
+                        item["peak_viewers"] = int(live_obj.get("viewer_count") or 0)
+                        item["last_game_id"] = live_obj.get("game_id") or None
+                        item["last_game_name"] = live_obj.get("game_name") or "—"
 
-                    # Cache user id + avatar (for VOD button / author icon)
-                    try:
-                        user = await self._get_user_by_login(login)
-                        if user:
-                            if user.get("profile_image_url"):
-                                item["profile_image_url"] = user["profile_image_url"]
-                            if user.get("id"):
-                                item["last_user_id"] = user["id"]
-                    except Exception as e:
-                        logger.warning("Profile/user fetch failed for %s: %s", login, e)
+                        try:
+                            box = await self._get_box_art_url_by_game_id(item["last_game_id"])
+                            if box:
+                                item["last_box_art_url"] = box  # keep {width}x{height} placeholders
+                        except Exception as e:
+                            logger.warning("Box art fetch failed for %s: %s", login, e)
 
+                        try:
+                            user = await self._get_user_by_login(login)
+                            if user:
+                                if user.get("profile_image_url"):
+                                    item["profile_image_url"] = user["profile_image_url"]
+                                if user.get("id"):
+                                    item["last_user_id"] = user["id"]
+                        except Exception as e:
+                            logger.warning("Profile/user fetch failed for %s: %s", login, e)
+
+                        changed = True
+                        self._streams_changed = True
+                    except Exception as e:
+                        logger.error("Announce error for %s: %s", login, e)
+
+                elif live_obj and item.get("live"):
+                    # ON -> ON : update cached peak and game changes
+                    current = int(live_obj.get("viewer_count") or 0)
+                    prev_peak = int(item.get("peak_viewers") or 0)
+                    if current > prev_peak:
+                        item["peak_viewers"] = current
+                        changed = True
+                        self._streams_changed = True
+
+                    current_game_id = live_obj.get("game_id") or None
+                    if current_game_id != item.get("last_game_id"):
+                        item["last_game_id"] = current_game_id
+                        item["last_game_name"] = live_obj.get("game_name") or "—"
+                        self._streams_changed = True
+                        changed = True
+                        try:
+                            box = await self._get_box_art_url_by_game_id(current_game_id)
+                            if box:
+                                item["last_box_art_url"] = box
+                                self._streams_changed = True
+                        except Exception as e:
+                            logger.warning("Box art refresh failed for %s: %s", login, e)
+
+                elif not live_obj and item.get("live"):
+                    # ON -> OFF : edit message to "stream ended"
+                    item["live"] = False
                     changed = True
-                except Exception as e:
-                    logger.error("Announce error for %s: %s", login, e)
-
-            elif live_obj and item.get("live"):
-                # ON -> ON : update cached peak and game changes
-                current = int(live_obj.get("viewer_count") or 0)
-                prev_peak = int(item.get("peak_viewers") or 0)
-                if current > prev_peak:
-                    item["peak_viewers"] = current
-                    changed = True
-
-                current_game_id = live_obj.get("game_id") or None
-                if current_game_id != item.get("last_game_id"):
-                    item["last_game_id"] = current_game_id
-                    item["last_game_name"] = live_obj.get("game_name") or "—"
+                    self._streams_changed = True
                     try:
-                        box = await self._get_box_art_url_by_game_id(current_game_id)
-                        if box:
-                            item["last_box_art_url"] = box
-                            changed = True
+                        guild = self.bot.get_guild(self._first_guild_id())
+                        await self._edit_to_stream_ended(item, guild)
                     except Exception as e:
-                        logger.warning("Box art refresh failed for %s: %s", login, e)
-
-            elif not live_obj and item.get("live"):
-                # ON -> OFF : edit message to "stream ended"
-                item["live"] = False
-                changed = True
-                try:
-                    guild = self.bot.get_guild(self._first_guild_id())
-                    await self._edit_to_stream_ended(item, guild)
-                except Exception as e:
-                    logger.error("Edit to 'ended' failed for %s: %s", login, e)
+                        logger.error("Edit to 'ended' failed for %s: %s", login, e)
 
         if changed:
-            save_streams(data)
+            await self.persist_streams()
 
     def _first_guild_id(self) -> int:
         """Return the first guild id the bot is in; used to resolve a Guild for message edits."""
@@ -690,13 +714,7 @@ class TwitchNotifier(commands.Cog):
                 user_id = user.get("id") if user else None
                 if user_id:
                     item["last_user_id"] = user_id  # lightweight memo
-                    # best-effort persist (avoid overwriting by reloading current file then saving)
-                    current = load_streams()
-                    for s in current:
-                        if s.get("login") == login:
-                            s["last_user_id"] = user_id
-                            break
-                    save_streams(current)
+                    self._streams_changed = True
 
             vod_url = await self._get_latest_vod_url(user_id, started_at)
             if vod_url:
