@@ -8,6 +8,10 @@ venv/
 .env
 .env.*
 
+# Base de données
+data/
+twitch.json
+
 # Fichiers logs
 logs/
 *.log
