@@ -1,8 +1,14 @@
 import logging
 from typing import Iterable, Optional
 
+import tiktoken
+
 
 MAX_DISCORD = 2000
+
+
+# Reuse tokenizer instance to avoid repeated initialization
+ENCODING = tiktoken.get_encoding("cl100k_base")
 
 
 def fit_for_discord(s: str, hard_limit: int = MAX_DISCORD, target: int = 1900) -> str:
@@ -33,7 +39,8 @@ def chunk_text(s: str, size: int = 1900) -> Iterable[str]:
 
 
 def estimate_token_count(text: str) -> int:
-    return int(len(text) / 4)
+    """Return the number of tokens in ``text`` using OpenAI's tokenizer."""
+    return len(ENCODING.encode(text))
 
 
 async def fetch_valid_messages(
@@ -92,24 +99,6 @@ async def generate_summary(messages, create_chat_completion, focus: Optional[str
         ]
 
         token_limit = 12000
-        selected_lines = []
-        total_tokens = 0
-
-        for line in lines:
-            tokens = estimate_token_count(line)
-            if total_tokens + tokens > token_limit:
-                break
-            selected_lines.append(line)
-            total_tokens += tokens
-
-        messages_text = "\n".join(selected_lines)
-        logging.info(f"📏 Approx tokens sent to GPT: {total_tokens}")
-        logging.info(f"🧾 Total lines kept: {len(selected_lines)}")
-        if selected_lines:
-            logging.info(f"🔸 First line: {selected_lines[0][:100]}...")
-            logging.info(f"🔸 Last line : {selected_lines[-1][:100]}...")
-        else:
-            logging.info("⚠️ No lines kept for summary (0 tokens)")
 
         instructions = [
             "Tu es Galactia, un assistant IA pour la guilde Les Galactiques.",
@@ -120,6 +109,28 @@ async def generate_summary(messages, create_chat_completion, focus: Optional[str
         ]
         if focus:
             instructions.append(f"Concentre-toi uniquement sur : {focus}.")
+
+        base_prompt = "Résume ces messages :\n"
+        total_tokens = estimate_token_count(" ".join(instructions))
+        total_tokens += estimate_token_count(base_prompt)
+
+        selected_lines = []
+
+        for line in lines:
+            tokens = estimate_token_count(line + "\n")
+            if total_tokens + tokens > token_limit:
+                break
+            selected_lines.append(line)
+            total_tokens += tokens
+
+        messages_text = "\n".join(selected_lines)
+        logging.info(f"📏 Tokens sent to GPT: {total_tokens}")
+        logging.info(f"🧾 Total lines kept: {len(selected_lines)}")
+        if selected_lines:
+            logging.info(f"🔸 First line: {selected_lines[0][:100]}...")
+            logging.info(f"🔸 Last line : {selected_lines[-1][:100]}...")
+        else:
+            logging.info("⚠️ No lines kept for summary (0 tokens)")
 
         logging.info("🧠 Full prompt to GPT (system + user).")
         logging.info("---- SYSTEM ----")

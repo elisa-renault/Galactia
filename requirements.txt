@@ -1,5 +1,6 @@
 discord.py
 openai
+tiktoken
 python-dotenv
 python-dateutil
 pytz
