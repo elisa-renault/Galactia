@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 import os
-from datetime import datetime, timezone, timedelta  # timedelta needed for VOD selection
+from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from typing import Dict, List, Optional
 
@@ -218,8 +218,7 @@ class TwitchNotifier(commands.Cog):
         )
 
     @twitch_group.command(name="list", description="List followed Twitch channels")
-    async def twitch_list(self, interaction: discord.Interaction):
-        """List all Twitch follows and where they are announced."""
+    async def list_streams(self, interaction: discord.Interaction):
         data = load_streams()
         if not data:
             return await interaction.response.send_message("No follows yet.", ephemeral=True)
@@ -228,11 +227,13 @@ class TwitchNotifier(commands.Cog):
         for s in data:
             ch = interaction.guild.get_channel(s["channel_id"])
             rid = s.get("role_id")
-            lines.append(
-                f"• **{s['login']}** → {ch.mention if ch else f'#deleted({s['channel_id']})'}"
-                + (f" (ping <@&{rid}>)" if rid else "")
-                + (" — live" if s.get("live") else "")
-            )
+
+            dest = ch.mention if ch else f"#deleted({s['channel_id']})"
+            ping = f" (ping <@&{rid}>)" if rid else ""
+            live_flag = " — live" if s.get("live") else ""
+
+            lines.append(f"• **{s['login']}** → {dest}{ping}{live_flag}")
+
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
     @twitch_group.command(name="remove", description="Stop following a Twitch channel (all destinations)")
