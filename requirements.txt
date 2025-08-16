@@ -1,6 +1,8 @@
 discord.py
 openai
 python-dotenv
+pydantic
+pydantic-settings
 python-dateutil
 pytz
 aiohttp
