@@ -150,6 +150,7 @@ class TwitchNotifier(commands.Cog):
         self.fallback_channel_id = int(os.getenv("TWITCH_ANNOUNCE_CHANNEL_ID", "0"))
         self._oauth_token: Optional[str] = None
         self._oauth_expire_ts: float = 0
+        self.session = aiohttp.ClientSession()
 
         if not self.twitch_client_id or not self.twitch_client_secret:
             logger.warning("Twitch credentials are missing; Twitch notifier will not start.")
@@ -158,9 +159,11 @@ class TwitchNotifier(commands.Cog):
             self.poller.start()
 
     def cog_unload(self):
-        """Stop the background poller when the cog is unloaded."""
+        """Stop the background poller and close HTTP session when the cog is unloaded."""
         if self.poller.is_running():
             self.poller.cancel()
+        if not self.session.closed:
+            asyncio.create_task(self.session.close())
 
     # ==========================
     # Slash command group /twitch (admin-only)
@@ -411,7 +414,7 @@ class TwitchNotifier(commands.Cog):
     # =========
     # Twitch Helix helpers
     # =========
-    async def _get_oauth_token(self, session: aiohttp.ClientSession) -> str:
+    async def _get_oauth_token(self) -> str:
         """
         Retrieve and cache an App Access Token for Twitch Helix.
         Reuses token until ~60 seconds before expiry.
@@ -425,7 +428,7 @@ class TwitchNotifier(commands.Cog):
             "client_secret": self.twitch_client_secret,
             "grant_type": "client_credentials",
         }
-        async with session.post(url, params=params, timeout=20) as r:
+        async with self.session.post(url, params=params, timeout=20) as r:
             data = await r.json()
             self._oauth_token = data["access_token"]
             self._oauth_expire_ts = time.time() + data.get("expires_in", 3600)
@@ -439,20 +442,19 @@ class TwitchNotifier(commands.Cog):
         if not logins:
             return []
         results: List[Dict] = []
-        async with aiohttp.ClientSession() as session:
-            token = await self._get_oauth_token(session)
-            headers = {
-                "Client-Id": self.twitch_client_id,
-                "Authorization": f"Bearer {token}",
-            }
-            for i in range(0, len(logins), 100):
-                chunk = logins[i:i + 100]
-                params = [("user_login", l) for l in chunk]
-                url = "https://api.twitch.tv/helix/streams"
-                async with session.get(url, params=params, headers=headers, timeout=20) as r:
-                    data = await r.json()
-                    if data and data.get("data"):
-                        results.extend(data["data"])
+        token = await self._get_oauth_token()
+        headers = {
+            "Client-Id": self.twitch_client_id,
+            "Authorization": f"Bearer {token}",
+        }
+        for i in range(0, len(logins), 100):
+            chunk = logins[i:i + 100]
+            params = [("user_login", l) for l in chunk]
+            url = "https://api.twitch.tv/helix/streams"
+            async with self.session.get(url, params=params, headers=headers, timeout=20) as r:
+                data = await r.json()
+                if data and data.get("data"):
+                    results.extend(data["data"])
         return results
 
     async def _get_user_by_login(self, login: str) -> Optional[Dict]:
@@ -462,25 +464,24 @@ class TwitchNotifier(commands.Cog):
         """
         if not login:
             return None
-        async with aiohttp.ClientSession() as session:
-            token = await self._get_oauth_token(session)
-            headers = {
-                "Client-Id": self.twitch_client_id,
-                "Authorization": f"Bearer {token}",
+        token = await self._get_oauth_token()
+        headers = {
+            "Client-Id": self.twitch_client_id,
+            "Authorization": f"Bearer {token}",
+        }
+        url = "https://api.twitch.tv/helix/users"
+        params = {"login": login}
+        async with self.session.get(url, params=params, headers=headers, timeout=15) as r:
+            data = await r.json()
+            users = data.get("data") or []
+            if not users:
+                return None
+            u = users[0]
+            return {
+                "id": u.get("id"),
+                "display_name": u.get("display_name") or u.get("login"),
+                "profile_image_url": u.get("profile_image_url"),
             }
-            url = "https://api.twitch.tv/helix/users"
-            params = {"login": login}
-            async with session.get(url, params=params, headers=headers, timeout=15) as r:
-                data = await r.json()
-                users = data.get("data") or []
-                if not users:
-                    return None
-                u = users[0]
-                return {
-                    "id": u.get("id"),
-                    "display_name": u.get("display_name") or u.get("login"),
-                    "profile_image_url": u.get("profile_image_url"),
-                }
 
     async def _get_profile_image_by_login(self, login: str) -> Optional[str]:
         """
@@ -497,20 +498,19 @@ class TwitchNotifier(commands.Cog):
         """
         if not game_id:
             return None
-        async with aiohttp.ClientSession() as session:
-            token = await self._get_oauth_token(session)
-            headers = {
-                "Client-Id": self.twitch_client_id,
-                "Authorization": f"Bearer {token}",
-            }
-            url = "https://api.twitch.tv/helix/games"
-            params = {"id": game_id}
-            async with session.get(url, params=params, headers=headers, timeout=15) as r:
-                data = await r.json()
-                items = data.get("data") or []
-                if not items:
-                    return None
-                return items[0].get("box_art_url")
+        token = await self._get_oauth_token()
+        headers = {
+            "Client-Id": self.twitch_client_id,
+            "Authorization": f"Bearer {token}",
+        }
+        url = "https://api.twitch.tv/helix/games"
+        params = {"id": game_id}
+        async with self.session.get(url, params=params, headers=headers, timeout=15) as r:
+            data = await r.json()
+            items = data.get("data") or []
+            if not items:
+                return None
+            return items[0].get("box_art_url")
 
     async def _get_latest_vod_url(self, user_id: Optional[str], started_at: Optional[str]) -> Optional[str]:
         """
@@ -521,23 +521,22 @@ class TwitchNotifier(commands.Cog):
         """
         if not user_id:
             return None
-        async with aiohttp.ClientSession() as session:
-            token = await self._get_oauth_token(session)
-            headers = {
-                "Client-Id": self.twitch_client_id,
-                "Authorization": f"Bearer {token}",
-            }
-            url = "https://api.twitch.tv/helix/videos"
-            params = {"user_id": user_id, "type": "archive", "first": 5, "sort": "time"}
-            async with session.get(url, params=params, headers=headers, timeout=15) as r:
-                data = await r.json()
-                vids = data.get("data") or []
-                if not vids:
-                    return None
+        token = await self._get_oauth_token()
+        headers = {
+            "Client-Id": self.twitch_client_id,
+            "Authorization": f"Bearer {token}",
+        }
+        url = "https://api.twitch.tv/helix/videos"
+        params = {"user_id": user_id, "type": "archive", "first": 5, "sort": "time"}
+        async with self.session.get(url, params=params, headers=headers, timeout=15) as r:
+            data = await r.json()
+            vids = data.get("data") or []
+            if not vids:
+                return None
 
-                if started_at:
-                    try:
-                        start_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            if started_at:
+                try:
+                    start_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
                         best = None
                         for v in vids:
                             ca = v.get("created_at")
