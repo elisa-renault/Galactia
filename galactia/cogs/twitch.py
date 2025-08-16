@@ -537,6 +537,7 @@ class TwitchNotifier(commands.Cog):
             if started_at:
                 try:
                     start_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+
                     best = None
                     for v in vids:
                         ca = v.get("created_at")
