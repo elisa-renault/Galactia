@@ -537,23 +537,24 @@ class TwitchNotifier(commands.Cog):
             if started_at:
                 try:
                     start_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
-                        best = None
-                        for v in vids:
-                            ca = v.get("created_at")
-                            if not ca:
-                                continue
-                            v_dt = datetime.fromisoformat(ca.replace("Z", "+00:00"))
-                            # allow some scheduling drift / reruns
-                            if v_dt >= start_dt - timedelta(hours=6):
-                                best = v
-                                break
-                        if best:
-                            return best.get("url")
-                    except Exception:
-                        pass
 
-                # Fallback: most recent archive
-                return vids[0].get("url")
+                    best = None
+                    for v in vids:
+                        ca = v.get("created_at")
+                        if not ca:
+                            continue
+                        v_dt = datetime.fromisoformat(ca.replace("Z", "+00:00"))
+                        # allow some scheduling drift / reruns
+                        if v_dt >= start_dt - timedelta(hours=6):
+                            best = v
+                            break
+                    if best:
+                        return best.get("url")
+                except Exception:
+                    pass
+
+            # Fallback: most recent archive
+            return vids[0].get("url")
 
     # =========
     # Announce / Edit
