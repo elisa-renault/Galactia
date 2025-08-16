@@ -27,6 +27,12 @@ logging.basicConfig(
     ],
 )
 
+logging.info("📦 Loading env from %s", env_file)
+logging.info(
+    "🚀 Starting Galactia in %s mode...",
+    os.getenv("ENV_MODE", "undefined"),
+)
+
 # Discord intents
 intents = discord.Intents.default()
 intents.message_content = True
@@ -38,10 +44,3 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GUILD_ID = os.getenv("DISCORD_GUILD_ID")
 
 __all__ = ["intents", "DISCORD_TOKEN", "GUILD_ID"]
-
-if __name__ == "__main__":
-    logging.info("📦 Loading env from %s", env_file)
-    logging.info(
-        "🚀 Starting Galactia in %s mode...",
-        os.getenv("ENV_MODE", "undefined"),
-    )
