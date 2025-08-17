@@ -19,6 +19,8 @@ logger.setLevel(logging.INFO)
 
 # Local JSON DB path for Twitch follow entries and cached metadata
 TWITCH_STREAMS_DB_PATH = os.path.join("data", "twitch.json")
+# Local JSON path for Twitch notifier runtime configuration
+TWITCH_CONFIG_PATH = os.path.join("data", "twitch_config.json")
 
 
 # ---------- Formatting helpers ----------
@@ -148,6 +150,26 @@ def save_streams(data: List[Dict]):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
+def load_config() -> Dict[str, int]:
+    """Load runtime configuration for the Twitch notifier."""
+    os.makedirs(os.path.dirname(TWITCH_CONFIG_PATH), exist_ok=True)
+    if not os.path.exists(TWITCH_CONFIG_PATH):
+        return {}
+    try:
+        with open(TWITCH_CONFIG_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        logger.warning("Failed to decode JSON from %s; using defaults", TWITCH_CONFIG_PATH)
+        return {}
+
+
+def save_config(data: Dict[str, int]):
+    """Persist runtime configuration for the Twitch notifier."""
+    os.makedirs(os.path.dirname(TWITCH_CONFIG_PATH), exist_ok=True)
+    with open(TWITCH_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
 # ---------- Cog ----------
 
 class TwitchNotifier(commands.Cog):
@@ -162,8 +184,11 @@ class TwitchNotifier(commands.Cog):
         self.bot = bot
         self.twitch_client_id = settings.twitch_client_id
         self.twitch_client_secret = settings.twitch_client_secret
-        self.check_interval = settings.twitch_check_interval
-        self.fallback_channel_id = settings.twitch_announce_channel_id or 0
+        cfg = load_config()
+        self.check_interval = int(cfg.get("check_interval", settings.twitch_check_interval))
+        self.fallback_channel_id = int(
+            cfg.get("announce_channel_id", settings.twitch_announce_channel_id or 0)
+        )
         self._oauth_token: Optional[str] = None
         self._oauth_expire_ts: float = 0
         self.session = session
@@ -179,6 +204,7 @@ class TwitchNotifier(commands.Cog):
         else:
             self.poller.change_interval(seconds=self.check_interval)
             self.poller.start()
+        self.persist_config()
 
     def cog_unload(self):
         """Stop the background poller and close HTTP session when the cog is unloaded."""
@@ -195,6 +221,15 @@ class TwitchNotifier(commands.Cog):
             if self._streams_changed:
                 save_streams(self.streams)
                 self._streams_changed = False
+
+    def persist_config(self):
+        """Persist runtime configuration to disk."""
+        save_config(
+            {
+                "check_interval": self.check_interval,
+                "announce_channel_id": self.fallback_channel_id,
+            }
+        )
 
     # ==========================
     # Slash command group /twitch (admin-only)
@@ -345,6 +380,38 @@ class TwitchNotifier(commands.Cog):
 
         await self.persist_streams()
         await interaction.response.send_message("✅ Test OFFLINE edited/sent.", ephemeral=True)
+
+    @twitch_group.command(name="config", description="Show current Twitch notifier settings")
+    async def twitch_show_config(self, interaction: discord.Interaction):
+        channel = self.bot.get_channel(self.fallback_channel_id)
+        channel_mention = channel.mention if channel else "None"
+        msg = f"⏱️ Intervalle: {self.check_interval}s\n📢 Salon par défaut: {channel_mention}"
+        await interaction.response.send_message(msg, ephemeral=True)
+
+    @twitch_group.command(name="set_interval", description="Update Twitch poll interval in seconds")
+    @app_commands.describe(seconds="Polling interval in seconds (minimum 10)")
+    async def twitch_set_interval(self, interaction: discord.Interaction, seconds: int):
+        if seconds < 10:
+            return await interaction.response.send_message(
+                "Interval must be at least 10 seconds.", ephemeral=True
+            )
+        self.check_interval = seconds
+        self.poller.change_interval(seconds=seconds)
+        self.persist_config()
+        await interaction.response.send_message(
+            f"✅ Interval updated to {seconds}s.", ephemeral=True
+        )
+
+    @twitch_group.command(name="set_channel", description="Set default announce channel")
+    @app_commands.describe(channel="Channel where live notifications will be sent")
+    async def twitch_set_channel(
+        self, interaction: discord.Interaction, channel: discord.TextChannel
+    ):
+        self.fallback_channel_id = channel.id
+        self.persist_config()
+        await interaction.response.send_message(
+            f"✅ Default channel set to {channel.mention}.", ephemeral=True
+        )
 
     # =========
     # Poll loop
