@@ -233,8 +233,9 @@ class YouTubeNotifier(commands.Cog):
             ch = interaction.guild.get_channel(s.get("announce_channel_id") or 0)
             rid = s.get("role_id")
             title = s.get("channel_title") or s.get("channel_id")
+            dest = ch.mention if ch else f"#deleted({s.get('announce_channel_id')})"
             lines.append(
-                f"• **{title}** → {ch.mention if ch else f'#deleted({s.get('announce_channel_id')})'}"
+                f"• **{title}** → {dest}"
                 + (f" (mention <@&{rid}>)" if rid else "")
             )
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
