@@ -10,7 +10,9 @@ venv/
 
 # Base de données
 data/
+twitch_config.json
 twitch.json
+youtube.json
 
 # Fichiers logs
 logs/

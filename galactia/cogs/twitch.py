@@ -356,6 +356,18 @@ class TwitchNotifier(commands.Cog):
             item["last_display_name"] = fake["user_name"]
             item["peak_viewers"] = int(fake.get("viewer_count") or 0)
 
+            # Ensure avatar/id cached for the test message
+            if not item.get("profile_image_url") or not item.get("last_user_id"):
+                try:
+                    user = await self._get_user_by_login(login)
+                    if user:
+                        if user.get("profile_image_url"):
+                            item["profile_image_url"] = user["profile_image_url"]
+                        if user.get("id"):
+                            item["last_user_id"] = user["id"]
+                except Exception as e:
+                    logger.warning("Profile/user fetch (test) failed for %s: %s", login, e)
+
             await self._announce_live(fake, item, interaction.guild)
             self._streams_changed = True
         await self.persist_streams()
@@ -448,8 +460,20 @@ class TwitchNotifier(commands.Cog):
                 if live_obj and not item.get("live"):
                     # OFF -> ON : send announcement and cache metadata
                     try:
-                        guild = self.bot.get_guild(self._first_guild_id())
-                        await self._announce_live(live_obj, item, guild)
+                        login = item["login"].lower()
+
+                        # 1) Résoudre l'user (id + avatar) AVANT d'annoncer
+                        try:
+                            user = await self._get_user_by_login(login)
+                            if user:
+                                if user.get("profile_image_url"):
+                                    item["profile_image_url"] = user["profile_image_url"]
+                                if user.get("id"):
+                                    item["last_user_id"] = user["id"]
+                        except Exception as e:
+                            logger.warning("Profile/user fetch failed for %s: %s", login, e)
+
+                        # 2) Renseigner le reste du contexte de live
                         item["live"] = True
                         item["last_display_name"] = live_obj.get("user_name") or login
                         item["last_stream_title"] = live_obj.get("title") or "—"
@@ -461,22 +485,16 @@ class TwitchNotifier(commands.Cog):
                         try:
                             box = await self._get_box_art_url_by_game_id(item["last_game_id"])
                             if box:
-                                item["last_box_art_url"] = box  # keep {width}x{height} placeholders
+                                item["last_box_art_url"] = box
                         except Exception as e:
                             logger.warning("Box art fetch failed for %s: %s", login, e)
 
-                        try:
-                            user = await self._get_user_by_login(login)
-                            if user:
-                                if user.get("profile_image_url"):
-                                    item["profile_image_url"] = user["profile_image_url"]
-                                if user.get("id"):
-                                    item["last_user_id"] = user["id"]
-                        except Exception as e:
-                            logger.warning("Profile/user fetch failed for %s: %s", login, e)
+                        # 3) Annonce LIVE (l’embed aura déjà l’icon_url)
+                        await self._announce_live(live_obj, item, self.bot.get_guild(self._first_guild_id()))
 
                         changed = True
                         self._streams_changed = True
+
                     except Exception as e:
                         logger.error("Announce error for %s: %s", login, e)
 
@@ -694,9 +712,21 @@ class TwitchNotifier(commands.Cog):
             or login
         )
 
-        content = f"🟣 **{display_name}** est en direct sur Twitch : {url}"
-        if item.get("role_id"):
-            content = f"<@&{item['role_id']}> " + content
+        # Best-effort: fetch avatar if missing in cache
+        if not item.get("profile_image_url"):
+            try:
+                user = await self._get_user_by_login(login)
+                if user and user.get("profile_image_url"):
+                    item["profile_image_url"] = user["profile_image_url"]
+                    self._streams_changed = True
+            except Exception:
+                pass
+
+        content = f"🟣 **{display_name}** est en direct sur Twitch !"
+        # Mention appended at the end
+        rid = item.get("role_id")
+        if rid:
+            content = f"{content} <@&{rid}>"
 
         embed = discord.Embed(
             title=stream.get("title") or "En direct sur Twitch !",
@@ -722,13 +752,22 @@ class TwitchNotifier(commands.Cog):
             thumb = thumb.replace("{width}", "1280").replace("{height}", "720")
             embed.set_image(url=thumb)
 
-        # Footer CTA
-        embed.set_footer(text="✨ Venez soutenir !")
+        # Footer with platform + published date (Europe/Paris)
+        published = stream.get("started_at")
+        if published:
+            try:
+                dt_utc = datetime.fromisoformat(published.replace("Z", "+00:00"))
+                dt_paris = dt_utc.astimezone(ZoneInfo("Europe/Paris"))
+                embed.set_footer(text=f"Twitch • {dt_paris.strftime('%d/%m/%Y %H:%M')}")
+            except Exception:
+                embed.set_footer(text="Twitch")
+        else:
+            embed.set_footer(text="Twitch")
 
         # LIVE link button
         view = discord.ui.View()
         view.add_item(discord.ui.Button(
-            label="▶️ Rejoindre le live",
+            label="✨ Venez soutenir !",
             url=url,
             style=discord.ButtonStyle.link
         ))
@@ -783,7 +822,7 @@ class TwitchNotifier(commands.Cog):
         # Footer with absolute local start/end times
         start_fmt = _fmt_datetime(started_at) if started_at else "?"
         end_fmt = datetime.now(ZoneInfo("Europe/Paris")).strftime("%d/%m/%Y %H:%M")
-        ended_embed.set_footer(text=f"Début : {start_fmt} • Fin : {end_fmt}")
+        ended_embed.set_footer(text=f"Twitch • Début : {start_fmt} • Fin : {end_fmt}")
 
         content = f"⏹️ **{display_name}** a terminé son live."
 
