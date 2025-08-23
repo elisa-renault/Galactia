@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import shutil
+import time
 from contextlib import AsyncExitStack
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
@@ -720,6 +721,7 @@ class TwitchNotifier(commands.Cog):
         thumb = stream.get("thumbnail_url")
         if thumb:
             thumb = thumb.replace("{width}", "1280").replace("{height}", "720")
+            thumb = f"{thumb}?t={int(time.time())}"
             embed.set_image(url=thumb)
 
         # Footer with platform + published date (Europe/Paris)
