@@ -703,7 +703,7 @@ class TwitchNotifier(commands.Cog):
 
         # Field: current game name
         game_name = stream.get("game_name") or item.get("last_game_name") or "—"
-        embed.add_field(name="🎮 Jeu", value=game_name, inline=True)
+        embed.add_field(name="👾 Jeu", value=game_name, inline=True)
 
         # Field: relative start time using Discord's dynamic timestamp
         start_rel = "—"
@@ -782,7 +782,7 @@ class TwitchNotifier(commands.Cog):
             icon_url=item.get("profile_image_url") or ""
         )
 
-        ended_embed.add_field(name="🎮 Jeu", value=item.get("last_game_name") or "—", inline=True)
+        ended_embed.add_field(name="👾 Jeu", value=item.get("last_game_name") or "—", inline=True)
         ended_embed.add_field(name="⏱️ Durée", value=duration, inline=True)
 
         if box_art:
