@@ -60,60 +60,6 @@ def _fmt_datetime(iso_ts: str) -> str:
         return "?"
 
 
-def _fmt_relative(iso_ts: Optional[str]) -> str:
-    """
-    Render a human-friendly relative time in French (e.g., 'à l’instant', 'il y a 3 heures').
-    Always computed relative to Europe/Paris timezone. Returns '—' on error/None.
-    """
-    if not iso_ts:
-        return "—"
-    try:
-        start_utc = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
-        now_paris = datetime.now(ZoneInfo("Europe/Paris"))
-        start_paris = start_utc.astimezone(ZoneInfo("Europe/Paris"))
-        delta = now_paris - start_paris
-
-        sec = int(delta.total_seconds())
-        if sec < 0:
-            sec = 0  # safety in case of clock skew
-
-        if sec < 10:
-            return "à l’instant"
-        if sec < 60:
-            return f"il y a {sec} s"
-
-        minutes = sec // 60
-        if minutes == 1:
-            return "il y a 1 minute"
-        if minutes < 60:
-            return f"il y a {minutes} minutes"
-
-        hours = minutes // 60
-        if hours == 1:
-            return "il y a 1 heure"
-        if hours < 24:
-            return f"il y a {hours} heures"
-
-        days = hours // 24
-        if days == 1:
-            return "hier"
-        if days < 7:
-            return f"il y a {days} jours"
-
-        weeks = days // 7
-        if weeks == 1:
-            return "la semaine dernière"
-        if days < 31:
-            return f"il y a {weeks} semaines"
-
-        months = days // 31
-        if months == 1:
-            return "le mois dernier"
-        return f"il y a {months} mois"
-    except Exception:
-        return "—"
-
-
 # ---------- Local JSON DB helpers ----------
 
 def ensure_db():
@@ -755,10 +701,20 @@ class TwitchNotifier(commands.Cog):
             icon_url=item.get("profile_image_url") or ""
         )
 
-        # Fields: game + relative start time
-        embed.add_field(name="👾 Jeu", value=stream.get("game_name") or "—", inline=True)
-        start_rel = _fmt_relative(stream.get("started_at")) if stream.get("started_at") else "—"
-        embed.add_field(name="🕒 Début", value=f"{start_rel}", inline=True)
+        # Field: current game name
+        game_name = stream.get("game_name") or item.get("last_game_name") or "—"
+        embed.add_field(name="🎮 Jeu", value=game_name, inline=True)
+
+        # Field: relative start time using Discord's dynamic timestamp
+        start_rel = "—"
+        started_at = stream.get("started_at")
+        if started_at:
+            try:
+                dt_start = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                start_rel = f"<t:{int(dt_start.timestamp())}:R>"
+            except Exception:
+                pass
+        embed.add_field(name="🕒 Début", value=start_rel, inline=True)
 
         # Live preview image
         thumb = stream.get("thumbnail_url")
@@ -807,7 +763,6 @@ class TwitchNotifier(commands.Cog):
         title_stream = item.get("last_stream_title") or "Stream terminé."
         duration = _fmt_duration(started_at) if started_at else "—"
         peak = item.get("peak_viewers") or 0  # kept for potential future use
-        game_name = item.get("last_game_name") or "—"
         box_art = item.get("last_box_art_url")
 
         channel = self.bot.get_channel(channel_id) if channel_id else None
@@ -827,7 +782,7 @@ class TwitchNotifier(commands.Cog):
             icon_url=item.get("profile_image_url") or ""
         )
 
-        ended_embed.add_field(name="👾 Jeu", value=game_name, inline=True)
+        ended_embed.add_field(name="🎮 Jeu", value=item.get("last_game_name") or "—", inline=True)
         ended_embed.add_field(name="⏱️ Durée", value=duration, inline=True)
 
         if box_art:
