@@ -257,37 +257,48 @@ class TwitchNotifier(commands.Cog):
     ):
         """Add a Twitch login to the follow list for a given announcement channel."""
         if not isinstance(channel, discord.TextChannel):
-            return await interaction.response.send_message("Please pick a text channel.", ephemeral=True)
+            return await interaction.response.send_message(
+                "Please pick a text channel.", ephemeral=True
+            )
+
+        await interaction.response.defer(ephemeral=True, thinking=True)
 
         login = twitch_login.strip().lower()
         async with self._streams_lock:
-            if any(s for s in self.streams if s["login"] == login and s["channel_id"] == channel.id):
+            if any(
+                s for s in self.streams if s["login"] == login and s["channel_id"] == channel.id
+            ):
                 exists = True
             else:
-                self.streams.append({
-                    "login": login,
-                    "channel_id": channel.id,
-                    "role_id": role.id if role else None,
-                    "live": False,
-                    "last_started_at": None,
-                    "last_message_id": None,
-                    "peak_viewers": 0,
-                    "last_game_id": None,
-                    "last_box_art_url": None,
-                    "last_display_name": None,
-                    "last_stream_title": None
-                })
+                self.streams.append(
+                    {
+                        "login": login,
+                        "channel_id": channel.id,
+                        "role_id": role.id if role else None,
+                        "live": False,
+                        "last_started_at": None,
+                        "last_message_id": None,
+                        "peak_viewers": 0,
+                        "last_game_id": None,
+                        "last_box_art_url": None,
+                        "last_display_name": None,
+                        "last_stream_title": None,
+                    }
+                )
                 self._streams_changed = True
                 exists = False
+
         if exists:
-            return await interaction.response.send_message(
-                f"**{login}** is already followed in {channel.mention}.", ephemeral=True
+            return await interaction.followup.send(
+                f"Already following **{login}** in {channel.mention}.",
+                ephemeral=True,
             )
+
         await self.persist_streams()
-        await interaction.response.send_message(
-            f"✅ I will follow **{login}** and announce lives in {channel.mention} "
-            + (f"(ping {role.mention})" if role else ""),
-            ephemeral=False
+        await interaction.followup.send(
+            f"Now following **{login}** in {channel.mention}"
+            + (f" (mention {role.mention})" if role else ""),
+            ephemeral=True,
         )
 
     @twitch_group.command(name="list", description="List followed Twitch channels")
@@ -314,6 +325,8 @@ class TwitchNotifier(commands.Cog):
     @app_commands.describe(twitch_login="Twitch login to remove")
     async def twitch_remove(self, interaction: discord.Interaction, twitch_login: str):
         """Remove any follow entries for the given Twitch login."""
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
         login = twitch_login.strip().lower()
         async with self._streams_lock:
             before = len(self.streams)
@@ -321,10 +334,11 @@ class TwitchNotifier(commands.Cog):
             removed = before - len(self.streams)
             if removed:
                 self._streams_changed = True
+
         await self.persist_streams()
-        await interaction.response.send_message(
-            f"🗑️ Removed **{removed}** follow(s) for **{login}**." if removed else f"No follow found for **{login}**.",
-            ephemeral=False
+        await interaction.followup.send(
+            f"Removed **{removed}** follow(s) for **{login}**." if removed else f"No follow found for **{login}**.",
+            ephemeral=False,
         )
 
     @twitch_group.command(name="test_online", description="Simulate a live (sends LIVE announcement)")
