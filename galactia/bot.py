@@ -37,6 +37,12 @@ async def _setup_hook():
         logging.exception("Failed loading galactia.cogs.twitch: %s", e)
 
     try:
+        await bot.load_extension("galactia.cogs.youtube")
+        logging.info("Loaded extension: galactia.cogs.youtube")
+    except Exception as e:
+        logging.exception("Failed loading galactia.cogs.youtube: %s", e)
+
+    try:
         await bot.load_extension("galactia.cogs.ai")
         logging.info("Loaded extension: galactia.cogs.ai")
     except Exception as e:
