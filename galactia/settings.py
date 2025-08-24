@@ -1,7 +1,9 @@
 import os
 import logging
 from datetime import datetime
-from pydantic import Field
+from typing import List
+
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
@@ -21,6 +23,14 @@ class Settings(BaseSettings):
     twitch_announce_channel_id: int | None = Field(default=None, env="TWITCH_ANNOUNCE_CHANNEL_ID")
     openai_api_key: str = Field(env="OPENAI_API_KEY")
     env_mode: str = Field(default="production", env="ENV_MODE")
+    premium_guild_ids: List[int] = Field(default_factory=list, env="PREMIUM_GUILD_IDS")
+
+    @field_validator("premium_guild_ids", mode="before")
+    @classmethod
+    def parse_premium_ids(cls, v):
+        if isinstance(v, str):
+            return [int(x.strip()) for x in v.split(",") if x.strip()]
+        return v or []
 
 
 settings = Settings()

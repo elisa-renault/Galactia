@@ -22,6 +22,7 @@ from galactia.handlers.summary import (
     generate_summary,
     MAX_DISCORD,
 )
+from galactia.premium import is_premium_guild
 
 
 async def create_chat_completion(**params):
@@ -346,6 +347,9 @@ class AICog(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author == self.bot.user:
+            return
+
+        if not message.guild or not is_premium_guild(message.guild.id):
             return
 
         if self.bot.user.mentioned_in(message):
