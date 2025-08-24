@@ -1,0 +1,9 @@
+﻿{% extends "base.html" %}
+{% block content %}
+  {% if user %}
+    <p>Bienvenue, {{ user.username }}.</p>
+    <p><a class="btn" href="/select-guild">Choisir une guilde</a></p>
+  {% else %}
+    <p>Bienvenue. Merci de <a class="btn" href="/login">te connecter via Discord</a>.</p>
+  {% endif %}
+{% endblock %}

@@ -1,26 +1,75 @@
-# Fichiers Python
+# ----------------------------
+# Python cache & compiled
+# ----------------------------
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyd
 
-# Environnements virtuels
+# ----------------------------
+# Virtual environments
+# ----------------------------
 venv/
+.venv/
+env/
+ENV/
+env.bak/
+
+# ----------------------------
+# Environment & secrets
+# ----------------------------
 .env
 .env.*
+*.env.local
+secrets.json
 
-# Base de données
+# ----------------------------
+# Database & dumps
+# ----------------------------
+*.sqlite3
+*.db
+*.sql
+*.dump
+*.bak
 data/
+
+# ----------------------------
+# Secrets / API configs
+# ----------------------------
 twitch_config.json
 twitch.json
 youtube.json
 
-# Fichiers logs
+# ----------------------------
+# Alembic cache
+# ----------------------------
+migrations/versions/__pycache__/
+
+# ----------------------------
+# Logs
+# ----------------------------
 logs/
 *.log
 
-# Fichiers système
+# ----------------------------
+# OS files
+# ----------------------------
 .DS_Store
 Thumbs.db
 
-# Fichiers spécifiques à l'IDE
-.vscod
+# ----------------------------
+# IDE / Editor
+# ----------------------------
+.vscode/
+.idea/
+*.swp
+
+# ----------------------------
+# Docker & deployment
+# ----------------------------
+docker-compose.override.yml
+*.pid
+*.sock
+*.pid.lock
+build/
+.cache/

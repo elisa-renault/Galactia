@@ -1,0 +1,33 @@
+﻿<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>{{ title or "Galactia Admin" }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://unpkg.com/htmx.org@2.0.2"></script>
+  <link rel="stylesheet" href="/static/base.css">
+</head>
+<body>
+  <header class="wrap">
+    <div class="left">
+      <h1>🌌 Galactia Admin</h1>
+    </div>
+    <nav>
+      {% if user %}
+        <span>Connecté : {{ user.username }}</span>
+        <a href="/select-guild">Guildes</a>
+        {% if user.is_site_admin %}
+          <a href="/admin/premium">Admin</a>   <!-- 👈 AJOUT -->
+        {% endif %}
+        <a href="/logout">Déconnexion</a>
+      {% else %}
+        <a href="/login">Connexion</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main class="wrap">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="wrap small">v0.1.0 — Phase 1</footer>
+</body>
+</html>

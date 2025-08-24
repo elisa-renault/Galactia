@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+  <a href="/select-guild" class="btn back">← Retour à mes guildes</a>
+  <h2>Features — Guild {{ guild_id }}</h2>
+
+  <ul style="list-style:none;padding:0;margin:0;display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">
+    {% for f in features %}
+      <li style="border:1px solid #333;padding:12px;border-radius:10px">
+        <div style="font-weight:600">{{ f.name }}</div>
+        <div style="color:#aaa">{{ f.key }}</div>
+        <form method="post" action="/g/{{ guild_id }}/features/toggle" style="margin-top:.5rem">
+          <input type="hidden" name="feature_id" value="{{ f.id }}">
+          <input type="hidden" name="enabled" value="{{ 0 if f.enabled else 1 }}">
+          {% if f.enabled %}
+            <button class="btn">Désactiver</button>
+          {% else %}
+            <button class="btn">Activer</button>
+          {% endif %}
+        </form>
+      </li>
+    {% endfor %}
+  </ul>
+{% endblock %}

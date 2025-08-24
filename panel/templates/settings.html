@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+  <a href="/select-guild" class="btn back">← Retour à mes guildes</a>
+
+  <div style="display:flex;align-items:center;gap:10px">
+    <img src="{{ guild_icon }}" alt="" width="40" height="40" style="border-radius:8px;object-fit:cover">
+    <h2 style="margin:0">{{ guild_name }}</h2>
+    <span style="color:#aaa">— ID: {{ guild_id }}</span>
+  </div>
+
+  <p>Ton rôle interne : <strong>{{ role }}</strong></p>
+
+  <p style="margin-top:1rem">
+  <a class="btn" href="/g/{{ guild_id }}/features">Gérer les features</a>
+  </p>
+
+{% endblock %}

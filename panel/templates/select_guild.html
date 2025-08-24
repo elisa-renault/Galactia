@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>Choisis une guilde</h2>
+  <ul class="grid">
+    {% for g in guilds %}
+        <li style="border:1px solid #333;padding:12px;border-radius:10px;display:flex;gap:12px;align-items:center">
+        <img src="{{ g.icon_url }}" alt="" width="40" height="40" style="border-radius:8px;object-fit:cover">
+        <div style="flex:1">
+            <div style="font-weight:600;margin-bottom:6px">{{ g.name }}</div>
+            <a class="btn" href="/g/{{ g.id }}">Gérer</a>
+        </div>
+        </li>
+    {% endfor %}
+  </ul>
+{% endblock %}

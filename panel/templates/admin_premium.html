@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>Premium — Attribution</h2>
+  <form method="post" action="/admin/premium/grant" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+    <label>Utilisateur
+      <select name="user_id">
+        {% for u in users %}
+          <option value="{{u.id}}">{{ u.display_name or u.username }} ({{u.id}})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Guilde
+      <select name="guild_id">
+        {% for g in guilds %}
+          <option value="{{g.id}}">{{ g.name or g.discord_id }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Tier
+      <select name="tier"><option>premium</option></select>
+    </label>
+    <label>Expire (ISO, optionnel)
+      <input name="expires_at" placeholder="2025-12-31T23:59:00">
+    </label>
+    <button class="btn">Donner l'accès</button>
+  </form>
+
+  <h3 style="margin-top:1.5rem">Guildes premium actives</h3>
+    {% if premiums and premiums|length > 0 %}
+    <table style="width:100%;border-collapse:collapse">
+        <thead>
+        <tr>
+            <th style="text-align:left;border-bottom:1px solid #333;padding:.4rem">Guilde</th>
+            <th style="text-align:left;border-bottom:1px solid #333;padding:.4rem">Discord ID</th>
+            <th style="text-align:left;border-bottom:1px solid #333;padding:.4rem">Utilisateur</th>
+            <th style="text-align:left;border-bottom:1px solid #333;padding:.4rem">Tier</th>
+            <th style="text-align:left;border-bottom:1px solid #333;padding:.4rem">Expire</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for row in premiums %}
+            <tr>
+            <td style="padding:.4rem">{{ row.guild_name or row.guild_discord_id }}</td>
+            <td style="padding:.4rem">{{ row.guild_discord_id }}</td>
+            <td style="padding:.4rem">{{ row.user_name }} ({{ row.user_id }})</td>
+            <td style="padding:.4rem">{{ row.tier }}</td>
+            <td style="padding:.4rem">{{ row.expires_at or "—" }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>Aucune guilde premium active pour le moment.</p>
+    {% endif %}
+
+  <h3 style="margin-top:1rem">Révoquer</h3>
+  <form method="post" action="/admin/premium/revoke" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+    <label>User ID <input name="user_id" required></label>
+    <label>Guild ID (DB) <input name="guild_id" required></label>
+    <button class="btn">Revoke</button>
+  </form>
+{% endblock %}

@@ -1,0 +1,10 @@
+﻿fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+itsdangerous
+httpx
+authlib
+pydantic-settings
+SQLAlchemy>=2.0
+alembic
