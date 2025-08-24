@@ -13,6 +13,7 @@ import aiohttp
 import discord
 from discord import app_commands, Permissions
 from discord.ext import commands, tasks
+from galactia.premium import premium_guild_only
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -160,6 +161,7 @@ class YouTubeNotifier(commands.Cog):
 
     # -------- add --------
     @youtube_group.command(name="add", description="Follow a YouTube channel and announce its new videos.")
+    @premium_guild_only()
     @app_commands.describe(
         youtube_channel="YouTube channel URL or handle (e.g. https://youtube.com/@LimitMaximum or @LimitMaximum)",
         discord_channel="Discord channel for announcements",
@@ -223,6 +225,7 @@ class YouTubeNotifier(commands.Cog):
 
     # -------- list --------
     @youtube_group.command(name="list", description="List followed YouTube channels.")
+    @premium_guild_only()
     async def youtube_list(self, interaction: discord.Interaction):
         data = _sanitize_rows(_load_rows())
         if not data:
@@ -242,6 +245,7 @@ class YouTubeNotifier(commands.Cog):
 
     # -------- remove --------
     @youtube_group.command(name="remove", description="Stop following a YouTube channel (all destinations).")
+    @premium_guild_only()
     @app_commands.describe(youtube_channel="The channel URL or handle previously followed")
     async def youtube_remove(self, interaction: discord.Interaction, youtube_channel: str):
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -263,6 +267,7 @@ class YouTubeNotifier(commands.Cog):
 
     # -------- test_new --------
     @youtube_group.command(name="test_new", description="Simulate a new video announcement for a followed channel.")
+    @premium_guild_only()
     @app_commands.describe(youtube_channel="A followed channel URL/handle")
     async def youtube_test_new(self, interaction: discord.Interaction, youtube_channel: str):
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -296,6 +301,7 @@ class YouTubeNotifier(commands.Cog):
         name="test_update",
         description="Simulate an embed update for the last announcement (title/description change)."
     )
+    @premium_guild_only()
     @app_commands.describe(youtube_channel="A followed channel URL/handle")
     async def youtube_test_update(self, interaction: discord.Interaction, youtube_channel: str):
         await interaction.response.defer(ephemeral=True, thinking=True)

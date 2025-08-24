@@ -14,6 +14,7 @@ import discord
 from discord import app_commands, Permissions
 from discord.ext import commands, tasks
 from galactia.settings import settings
+from galactia.premium import premium_guild_only
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -190,6 +191,7 @@ class TwitchNotifier(commands.Cog):
     # ----- Admin commands -----
 
     @twitch_group.command(name="add", description="Follow a Twitch channel and announce its lives")
+    @premium_guild_only()
     @app_commands.describe(
         twitch_login="Twitch login (e.g. 'shroud')",
         channel="Discord channel for announcements",
@@ -249,6 +251,7 @@ class TwitchNotifier(commands.Cog):
         )
 
     @twitch_group.command(name="list", description="List followed Twitch channels")
+    @premium_guild_only()
     async def list_streams(self, interaction: discord.Interaction):
         async with self._streams_lock:
             data = list(self.streams)
@@ -269,6 +272,7 @@ class TwitchNotifier(commands.Cog):
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
     @twitch_group.command(name="remove", description="Stop following a Twitch channel (all destinations)")
+    @premium_guild_only()
     @app_commands.describe(twitch_login="Twitch login to remove")
     async def twitch_remove(self, interaction: discord.Interaction, twitch_login: str):
         """Remove any follow entries for the given Twitch login."""
@@ -289,6 +293,7 @@ class TwitchNotifier(commands.Cog):
         )
 
     @twitch_group.command(name="test_online", description="Simulate a live (sends LIVE announcement)")
+    @premium_guild_only()
     @app_commands.describe(twitch_login="A previously followed Twitch login")
     async def twitch_test_online(self, interaction: discord.Interaction, twitch_login: str):
         """Simulate a LIVE stream announcement for testing."""
@@ -335,6 +340,7 @@ class TwitchNotifier(commands.Cog):
         await interaction.response.send_message("✅ Test LIVE sent.", ephemeral=True)
 
     @twitch_group.command(name="test_offline", description="Simulate end of live (edits to OFFLINE)")
+    @premium_guild_only()
     @app_commands.describe(twitch_login="A previously followed Twitch login")
     async def twitch_test_offline(self, interaction: discord.Interaction, twitch_login: str):
         """Simulate editing a previous LIVE message into an OFFLINE summary."""
@@ -355,6 +361,7 @@ class TwitchNotifier(commands.Cog):
         await interaction.response.send_message("✅ Test OFFLINE edited/sent.", ephemeral=True)
 
     @twitch_group.command(name="config", description="Show current Twitch notifier settings")
+    @premium_guild_only()
     async def twitch_show_config(self, interaction: discord.Interaction):
         channel = self.bot.get_channel(self.fallback_channel_id)
         channel_mention = channel.mention if channel else "None"
@@ -362,6 +369,7 @@ class TwitchNotifier(commands.Cog):
         await interaction.response.send_message(msg, ephemeral=True)
 
     @twitch_group.command(name="set_interval", description="Update Twitch poll interval in seconds")
+    @premium_guild_only()
     @app_commands.describe(seconds="Polling interval in seconds (minimum 10)")
     async def twitch_set_interval(self, interaction: discord.Interaction, seconds: int):
         if seconds < 10:
@@ -376,6 +384,7 @@ class TwitchNotifier(commands.Cog):
         )
 
     @twitch_group.command(name="set_channel", description="Set default announce channel")
+    @premium_guild_only()
     @app_commands.describe(channel="Channel where live notifications will be sent")
     async def twitch_set_channel(
         self, interaction: discord.Interaction, channel: discord.TextChannel
