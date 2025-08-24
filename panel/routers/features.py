@@ -15,7 +15,7 @@ router = APIRouter()
 def features_page(guild_id: str, request: Request, db: Session = Depends(get_db)):
     user = require_auth_request(request)
     g = require_guild_admin(request, int(guild_id), db)
-    if not has_premium(int(user["id"]), g.id, db):
+    if not has_premium(g.id, db):
         raise HTTPException(403, "Premium required for this guild")
 
     features = db.execute(select(Feature).order_by(Feature.id)).scalars().all()
@@ -33,7 +33,7 @@ def toggle_feature(guild_id: str, request: Request,
                    db: Session = Depends(get_db)):
     user = require_auth_request(request)
     g = require_guild_admin(request, int(guild_id), db)
-    if not has_premium(int(user["id"]), g.id, db):
+    if not has_premium(g.id, db):
         raise HTTPException(403, "Premium required")
 
     flag = db.execute(select(GuildFeatureFlag).where(and_(

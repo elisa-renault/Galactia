@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
-from core.models import User, Guild, GuildMember, PremiumMembership
+from core.models import User, Guild, GuildMember, GuildPremium
 
 def require_auth_request(request: Request) -> dict:
     user = request.session.get("user")
@@ -37,10 +37,9 @@ def require_guild_admin(request: Request, guild_id: int, db: Session) -> Guild:
         raise HTTPException(403, "Guild admin only")
     return g
 
-def has_premium(user_db_id: int, guild_db_id: int, db: Session) -> bool:
-    pm = db.execute(select(PremiumMembership).where(and_(
-        PremiumMembership.user_id == user_db_id,
-        PremiumMembership.guild_id == guild_db_id,
-        (PremiumMembership.expires_at.is_(None)) | (PremiumMembership.expires_at > datetime.utcnow())
+def has_premium(guild_db_id: int, db: Session) -> bool:
+    pm = db.execute(select(GuildPremium).where(and_(
+        GuildPremium.guild_id == guild_db_id,
+        (GuildPremium.expires_at.is_(None)) | (GuildPremium.expires_at > datetime.utcnow())
     ))).scalar_one_or_none()
     return pm is not None
