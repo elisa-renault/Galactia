@@ -25,14 +25,14 @@ class Feature(Base):
     name: Mapped[str] = mapped_column(String(100))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-class PremiumMembership(Base):
-    __tablename__ = "premium_memberships"
+class GuildPremium(Base):
+    __tablename__ = "guild_premium"
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    guild_id: Mapped[int] = mapped_column(ForeignKey("guilds.id"), index=True)
+    guild_id: Mapped[int] = mapped_column(ForeignKey("guilds.id"), unique=True, index=True)
     tier: Mapped[str] = mapped_column(String(32), default="premium")  # extensible
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    __table_args__ = (UniqueConstraint("user_id", "guild_id", name="uq_premium_user_guild"), )
+    granted_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    __table_args__ = (UniqueConstraint("guild_id", name="uq_guild_premium"), )
 
 class GuildFeatureFlag(Base):
     __tablename__ = "guild_feature_flags"
