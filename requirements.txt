@@ -4,7 +4,12 @@ tiktoken
 python-dotenv
 pydantic
 pydantic-settings
+sqlalchemy
+asyncpg
+alembic
 python-dateutil
 pytz
 aiohttp
 tzdata
+pytest
+pytest-asyncio
