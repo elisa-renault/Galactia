@@ -1,6 +1,4 @@
 # galactia/cogs/youtube.py
-import asyncio
-import json
 import logging
 import os
 import re
@@ -13,50 +11,11 @@ import aiohttp
 import discord
 from discord import app_commands, Permissions
 from discord.ext import commands, tasks
+from galactia.repositories import GuildSettingsRepository, YouTubeFollowRepository
+from galactia.settings import settings
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-YOUTUBE_DB_PATH = os.path.join("data", "youtube.json")
-
-
-# -----------------------
-# JSON helpers (resilient)
-# -----------------------
-def _ensure_db():
-    os.makedirs(os.path.dirname(YOUTUBE_DB_PATH), exist_ok=True)
-    if not os.path.exists(YOUTUBE_DB_PATH):
-        with open(YOUTUBE_DB_PATH, "w", encoding="utf-8") as f:
-            json.dump([], f)
-
-
-def _load_rows() -> List[Dict]:
-    _ensure_db()
-    with open(YOUTUBE_DB_PATH, "r", encoding="utf-8") as f:
-        try:
-            data = json.load(f)
-            if isinstance(data, list):
-                return data
-            return []
-        except Exception:
-            return []
-
-
-def _save_rows(rows: List[Dict]) -> None:
-    with open(YOUTUBE_DB_PATH, "w", encoding="utf-8") as f:
-        json.dump(rows, f, indent=2, ensure_ascii=False)
-
-
-def _sanitize_rows(rows: List[Dict]) -> List[Dict]:
-    """Drop malformed legacy rows to avoid KeyErrors."""
-    good = []
-    for s in rows:
-        if not isinstance(s, dict):
-            continue
-        # minimal required fields for runtime usage
-        if s.get("channel_id") and s.get("announce_channel_id"):
-            good.append(s)
-    return good
 
 # -----------------------
 # Small time helpers
@@ -136,14 +95,25 @@ class YouTubeNotifier(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.youtube_key = os.getenv("YOUTUBE_API_KEY")
-        self.poll_interval = int(os.getenv("YOUTUBE_POLL_INTERVAL", "300"))
+        self.youtube_key = settings.youtube_api_key
+        self.poll_interval = int(os.getenv("YOUTUBE_POLL_INTERVAL", settings.youtube_check_interval))
+        self.follow_repo = YouTubeFollowRepository()
+        self.guild_settings_repo = GuildSettingsRepository()
 
         if not self.youtube_key:
             logger.warning("YOUTUBE_API_KEY missing; youtube notifier disabled.")
         else:
             self.poller.change_interval(seconds=self.poll_interval)
             self.poller.start()
+
+    async def get_or_create_guild_settings(self, guild_id: int) -> Dict:
+        return await self.guild_settings_repo.get_or_create(
+            guild_id,
+            twitch_check_interval=settings.twitch_check_interval,
+            twitch_announce_channel_id=settings.twitch_announce_channel_id,
+            youtube_check_interval=settings.youtube_check_interval,
+            youtube_announce_channel_id=settings.youtube_announce_channel_id,
+        )
 
     def cog_unload(self):
         if self.poller.is_running():
@@ -192,15 +162,21 @@ class YouTubeNotifier(commands.Cog):
         title = meta.get("title") or cid
         handle = meta.get("handle") or ""
 
-        data = _sanitize_rows(_load_rows())
-        # Duplicate check (resilient)
-        if any(s for s in data if s.get("channel_id") == cid and s.get("announce_channel_id") == discord_channel.id):
+        if interaction.guild_id is None:
+            return await interaction.followup.send(
+                "This command must be used in a server.",
+                ephemeral=True,
+            )
+        guild_id = int(interaction.guild_id)
+        await self.get_or_create_guild_settings(guild_id)
+        if await self.follow_repo.exists(guild_id, cid, discord_channel.id):
             return await interaction.followup.send(
                 f"Already following **{title}** in {discord_channel.mention}.",
                 ephemeral=True
             )
 
         row = {
+            "guild_id": guild_id,
             "channel_id": cid,
             "channel_title": title,
             "channel_handle": handle,
@@ -212,8 +188,7 @@ class YouTubeNotifier(commands.Cog):
             "last_message_id": None,
             "channel_thumb_url": meta.get("thumb_url"),
         }
-        data.append(row)
-        _save_rows(data)
+        await self.follow_repo.upsert(row)
 
         await interaction.followup.send(
             f"Now following **{title}** in {discord_channel.mention}"
@@ -224,7 +199,12 @@ class YouTubeNotifier(commands.Cog):
     # -------- list --------
     @youtube_group.command(name="list", description="List followed YouTube channels.")
     async def youtube_list(self, interaction: discord.Interaction):
-        data = _sanitize_rows(_load_rows())
+        if interaction.guild_id is None:
+            return await interaction.response.send_message(
+                "This command must be used in a server.",
+                ephemeral=True,
+            )
+        data = await self.follow_repo.list_by_guild(int(interaction.guild_id))
         if not data:
             return await interaction.response.send_message("No YouTube follows yet.", ephemeral=True)
 
@@ -245,20 +225,21 @@ class YouTubeNotifier(commands.Cog):
     @app_commands.describe(youtube_channel="The channel URL or handle previously followed")
     async def youtube_remove(self, interaction: discord.Interaction, youtube_channel: str):
         await interaction.response.defer(ephemeral=True, thinking=True)
+        if interaction.guild_id is None:
+            return await interaction.followup.send(
+                "This command must be used in a server.",
+                ephemeral=True,
+            )
 
         meta = await self._resolve_channel_meta(youtube_channel.strip())
         if not meta or not meta.get("channel_id"):
             return await interaction.followup.send("Channel not found.", ephemeral=True)
 
         cid = meta["channel_id"]
-        data = _sanitize_rows(_load_rows())
-        before = len(data)
-        data = [s for s in data if s.get("channel_id") != cid]
-        _save_rows(data)
-        removed = before - len(data)
+        removed = await self.follow_repo.remove_by_channel_id(int(interaction.guild_id), cid)
         await interaction.followup.send(
             f"Removed **{removed}** follow(s) for **{meta.get('title') or cid}**." if removed else "No follow found.",
-            ephemeral=False
+            ephemeral=True
         )
 
     # -------- test_new --------
@@ -266,7 +247,12 @@ class YouTubeNotifier(commands.Cog):
     @app_commands.describe(youtube_channel="A followed channel URL/handle")
     async def youtube_test_new(self, interaction: discord.Interaction, youtube_channel: str):
         await interaction.response.defer(ephemeral=True, thinking=True)
-        data = _sanitize_rows(_load_rows())
+        if interaction.guild_id is None:
+            return await interaction.followup.send(
+                "This command must be used in a server.",
+                ephemeral=True,
+            )
+        data = await self.follow_repo.list_by_guild(int(interaction.guild_id))
         if not data:
             return await interaction.followup.send("No YouTube follows yet.", ephemeral=True)
 
@@ -289,6 +275,7 @@ class YouTubeNotifier(commands.Cog):
         }
 
         await self._announce_new_video(fake_video, item)
+        await self.follow_repo.upsert(item)
         await interaction.followup.send("New video test sent.", ephemeral=True)
 
     # -------- test_update --------
@@ -300,7 +287,12 @@ class YouTubeNotifier(commands.Cog):
     async def youtube_test_update(self, interaction: discord.Interaction, youtube_channel: str):
         await interaction.response.defer(ephemeral=True, thinking=True)
 
-        data = _sanitize_rows(_load_rows())
+        if interaction.guild_id is None:
+            return await interaction.followup.send(
+                "This command must be used in a server.",
+                ephemeral=True,
+            )
+        data = await self.follow_repo.list_by_guild(int(interaction.guild_id))
         if not data:
             return await interaction.followup.send("No YouTube follows yet.", ephemeral=True)
 
@@ -341,21 +333,25 @@ class YouTubeNotifier(commands.Cog):
         if not self.youtube_key:
             return
 
-        data = _sanitize_rows(_load_rows())
+        data = await self.follow_repo.list_all()
         if not data:
             return
 
-        changed = False
+        changed_rows = {}
         for row in data:
             try:
+                row_key = (
+                    row.get("guild_id"),
+                    row.get("channel_id"),
+                    row.get("announce_channel_id"),
+                )
                 uploads = row.get("uploads_playlist_id")
                 if not uploads:
-                    # Try to refresh metadata once
                     meta = await self._resolve_channel_meta(row.get("channel_handle") or row.get("channel_id") or "")
                     if meta and meta.get("uploads_playlist_id"):
                         uploads = meta["uploads_playlist_id"]
                         row["uploads_playlist_id"] = uploads
-                        changed = True
+                        changed_rows[row_key] = row
                     else:
                         continue
 
@@ -365,16 +361,16 @@ class YouTubeNotifier(commands.Cog):
                 v = latest[0]
                 last_id = row.get("last_video_id")
                 if v["video_id"] != last_id:
-                    # New video found
                     await self._announce_new_video(v, row)
                     row["last_video_id"] = v["video_id"]
                     row["last_video_published_at"] = v.get("published_at")
-                    changed = True
+                    changed_rows[row_key] = row
             except Exception as e:
                 logger.warning("YouTube poll error for %s: %s", row.get("channel_id"), e)
 
-        if changed:
-            _save_rows(data)
+        if changed_rows:
+            await self.follow_repo.upsert_many(list(changed_rows.values()))
+        return
 
     # =========
     # API helpers
