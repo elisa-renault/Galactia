@@ -1,4 +1,4 @@
-"""create supabase storage tables
+"""create postgres storage tables
 
 Revision ID: 20260519_0001
 Revises:
@@ -98,4 +98,3 @@ def downgrade() -> None:
     op.drop_index("ix_twitch_follows_guild_id", table_name="twitch_follows")
     op.drop_table("twitch_follows")
     op.drop_table("guild_settings")
-

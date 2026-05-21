@@ -1,4 +1,4 @@
-from scripts.migrate_json_to_supabase import (
+from scripts.migrate_json_to_postgres import (
     build_guild_settings_row,
     build_twitch_row,
     build_youtube_row,
@@ -58,4 +58,3 @@ def test_build_youtube_row_maps_legacy_json_shape():
     assert row["channel_id"] == "UC123"
     assert row["announce_channel_id"] == 456
     assert row["last_video_published_at"] == "2025-01-01T00:00:00Z"
-
