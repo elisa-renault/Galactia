@@ -57,7 +57,7 @@ def _fmt_datetime(iso_ts: str) -> str:
 class TwitchNotifier(commands.Cog):
     """
     Twitch live notifier (polling Twitch Helix).
-    - Stores follows/state in Supabase/Postgres
+    - Stores follows/state in PostgreSQL
     - Slash commands (scoped under /twitch): add | remove | list | test_online | test_offline
     - Announces when a followed channel goes live, edits when it ends
     """

@@ -23,34 +23,52 @@ def normalize_async_database_url(database_url: str) -> str:
     return database_url
 
 
+def build_database_url(
+    *,
+    database_url: str | None = None,
+    supabase_database_url: str | None = None,
+    supabase_project_id: str | None = None,
+    supabase_password: str | None = None,
+) -> str:
+    """Build the asyncpg URL used by SQLAlchemy for PostgreSQL."""
+    if database_url:
+        return normalize_async_database_url(database_url)
+    if supabase_database_url:
+        return normalize_async_database_url(supabase_database_url)
+    if not supabase_project_id or not supabase_password:
+        raise ValueError(
+            "DATABASE_URL, SUPABASE_DATABASE_URL, or VITE_SUPABASE_PROJECT_ID + "
+            "VITE_SUPABASE_PASSWORD must be configured."
+        )
+    encoded_password = quote(supabase_password, safe="")
+    return (
+        "postgresql+asyncpg://postgres:"
+        f"{encoded_password}@db.{supabase_project_id}.supabase.co:5432/postgres"
+    )
+
+
 def build_supabase_database_url(
     *,
     database_url: str | None = None,
     project_id: str | None = None,
     password: str | None = None,
 ) -> str:
-    """Build the asyncpg URL used by SQLAlchemy for Supabase Postgres."""
-    if database_url:
-        return normalize_async_database_url(database_url)
-    if not project_id or not password:
-        raise ValueError(
-            "SUPABASE_DATABASE_URL or VITE_SUPABASE_PROJECT_ID + "
-            "VITE_SUPABASE_PASSWORD must be configured."
-        )
-    encoded_password = quote(password, safe="")
-    return (
-        "postgresql+asyncpg://postgres:"
-        f"{encoded_password}@db.{project_id}.supabase.co:5432/postgres"
+    """Compatibility wrapper for the previous Supabase-specific helper."""
+    return build_database_url(
+        database_url=database_url,
+        supabase_project_id=project_id,
+        supabase_password=password,
     )
 
 
 def get_database_url() -> str:
     from galactia.settings import settings
 
-    return build_supabase_database_url(
-        database_url=settings.supabase_database_url,
-        project_id=settings.vite_supabase_project_id,
-        password=settings.vite_supabase_password,
+    return build_database_url(
+        database_url=settings.database_url,
+        supabase_database_url=settings.supabase_database_url,
+        supabase_project_id=settings.vite_supabase_project_id,
+        supabase_password=settings.vite_supabase_password,
     )
 
 
@@ -66,4 +84,3 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
         expire_on_commit=False,
         class_=AsyncSession,
     )
-

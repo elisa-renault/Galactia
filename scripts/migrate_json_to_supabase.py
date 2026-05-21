@@ -87,7 +87,7 @@ def build_youtube_row(raw: dict[str, Any], guild_id: int) -> dict[str, Any]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Import local Galactia JSON storage into Supabase/Postgres."
+        description="Import local Galactia JSON storage into PostgreSQL."
     )
     parser.add_argument("--guild-id", type=int, default=None)
     parser.add_argument("--env-file", default=None)
