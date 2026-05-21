@@ -1,0 +1,555 @@
+[
+  {
+    "prompt": "résume",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": null,
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume les 20 derniers messages",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": null,
+      "count_limit": 20,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "fais un résumé des 200 derniers messages",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": null,
+      "count_limit": 200,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume les 600 derniers messages",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": null,
+      "count_limit": 600,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume les premiers messages",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": null,
+      "count_limit": null,
+      "selection_mode": "earliest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume le début de ce matin",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "ce matin",
+      "count_limit": null,
+      "selection_mode": "earliest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "qu'est-ce qu'il s'est passé hier ?",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "hier",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume depuis hier",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "depuis hier",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "qu'est-ce que j'ai raté cette semaine ?",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "cette semaine",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume les décisions importantes de ce matin",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "ce matin",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": "décisions importantes",
+      "preset": "decisions"
+    }
+  },
+  {
+    "prompt": "résume les dramas d'hier",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "hier",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": "drama",
+      "preset": "drama"
+    }
+  },
+  {
+    "prompt": "résume les messages de Aqua",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": [
+        "Aqua"
+      ],
+      "time_limit": null,
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume les messages de @Aqua",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": [
+        "Aqua"
+      ],
+      "time_limit": null,
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume les messages de Elsia et Nox",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": [
+        "Elsia",
+        "Nox"
+      ],
+      "time_limit": null,
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "fais un résumé drôle",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": null,
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": "drôle",
+      "preset": "funny"
+    }
+  },
+  {
+    "prompt": "résume uniquement les décisions importantes",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": null,
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": "décisions importantes",
+      "preset": "decisions"
+    }
+  },
+  {
+    "prompt": "fais un résumé des discussions sur les strats raid",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": null,
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": "strats raid",
+      "preset": "raid"
+    }
+  },
+  {
+    "prompt": "qu'est-ce que j'ai raté cette semaine côté roster ?",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "cette semaine",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": "roster",
+      "preset": "raid"
+    }
+  },
+  {
+    "prompt": "résume depuis 8h",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "depuis 8h",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume entre 21h et 23h",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "entre 21h et 23h",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "ping",
+    "expected": {
+      "summary": false,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": null,
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "qui es-tu ?",
+    "expected": {
+      "summary": false,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": null,
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume #officiers",
+    "expected": {
+      "summary": true,
+      "wrong_channel": true,
+      "authors": null,
+      "time_limit": null,
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume https://discord.com/channels/1/222/333",
+    "expected": {
+      "summary": true,
+      "wrong_channel": true,
+      "authors": null,
+      "time_limit": null,
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume les logs techniques",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": null,
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": "logs techniques",
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume les memes",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": null,
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": "memes",
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume les annonces importantes",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": null,
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": "annonces importantes",
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume les 10 premiers messages d'hier",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "hier",
+      "count_limit": 10,
+      "selection_mode": "earliest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume les 10 derniers messages d'hier",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "hier",
+      "count_limit": 10,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume uniquement les actions à retenir",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": null,
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": "actions à retenir",
+      "preset": "actions"
+    }
+  },
+  {
+    "prompt": "résume mars dernier",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "mars dernier",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume les 3 derniers jours",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "les 3 derniers jours",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume mardi soir",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "mardi soir",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume T1 2025",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "T1 2025",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume avant 18h",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "avant 18h",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume depuis lundi jusqu’à mercredi",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "depuis lundi jusqu’à mercredi",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume ajd",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "ajd",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume dep 30 mn",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "dep 30 mn",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume les 3 der j",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "les 3 der j",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume mar soir",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "mar soir",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume sept der",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "sept der",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  },
+  {
+    "prompt": "résume avt 18h",
+    "expected": {
+      "summary": true,
+      "wrong_channel": false,
+      "authors": null,
+      "time_limit": "avt 18h",
+      "count_limit": null,
+      "selection_mode": "latest",
+      "focus": null,
+      "preset": null
+    }
+  }
+]

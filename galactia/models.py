@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, Text, UniqueConstraint, func, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -34,6 +34,61 @@ class GuildSettings(TimestampMixin, Base):
     twitch_announce_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     youtube_check_interval: Mapped[int] = mapped_column(Integer, nullable=False, default=300)
     youtube_announce_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    timezone: Mapped[str] = mapped_column(Text, nullable=False, default="Europe/Paris", server_default="Europe/Paris")
+    language: Mapped[str] = mapped_column(Text, nullable=False, default="fr", server_default="fr")
+    summary_allowed_channel_ids: Mapped[list[int]] = mapped_column(
+        ARRAY(BigInteger),
+        nullable=False,
+        default=list,
+        server_default=text("'{}'::bigint[]"),
+    )
+    summary_allowed_role_ids: Mapped[list[int]] = mapped_column(
+        ARRAY(BigInteger),
+        nullable=False,
+        default=list,
+        server_default=text("'{}'::bigint[]"),
+    )
+    summary_max_messages: Mapped[int] = mapped_column(Integer, nullable=False, default=500, server_default="500")
+    summary_max_scan_messages: Mapped[int] = mapped_column(Integer, nullable=False, default=5000, server_default="5000")
+    summary_quota_guild_daily: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
+    summary_quota_user_daily: Mapped[int] = mapped_column(Integer, nullable=False, default=20, server_default="20")
+    summary_quota_channel_daily: Mapped[int] = mapped_column(Integer, nullable=False, default=50, server_default="50")
+    summary_quota_tokens_daily: Mapped[int] = mapped_column(Integer, nullable=False, default=500000, server_default="500000")
+
+
+class AIRequest(Base):
+    __tablename__ = "ai_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    guild_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    request_type: Mapped[str] = mapped_column(Text, nullable=False, default="summary")
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preset: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    messages_scanned: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    messages_selected: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    messages_ignored: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completion_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
 
 
 class TwitchFollow(TimestampMixin, Base):
@@ -93,4 +148,3 @@ class YouTubeFollow(TimestampMixin, Base):
     last_video_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     channel_thumb_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-

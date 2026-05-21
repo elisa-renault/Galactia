@@ -10,6 +10,20 @@ from galactia.db import get_session_factory
 from galactia.models import GuildSettings
 
 
+DEFAULT_SUMMARY_SETTINGS = {
+    "timezone": "Europe/Paris",
+    "language": "fr",
+    "summary_allowed_channel_ids": [],
+    "summary_allowed_role_ids": [],
+    "summary_max_messages": 500,
+    "summary_max_scan_messages": 5000,
+    "summary_quota_guild_daily": 100,
+    "summary_quota_user_daily": 20,
+    "summary_quota_channel_daily": 50,
+    "summary_quota_tokens_daily": 500000,
+}
+
+
 def _settings_to_dict(row: GuildSettings) -> dict[str, Any]:
     return {
         "guild_id": row.guild_id,
@@ -17,7 +31,33 @@ def _settings_to_dict(row: GuildSettings) -> dict[str, Any]:
         "twitch_announce_channel_id": row.twitch_announce_channel_id,
         "youtube_check_interval": row.youtube_check_interval,
         "youtube_announce_channel_id": row.youtube_announce_channel_id,
+        "timezone": row.timezone,
+        "language": row.language,
+        "summary_allowed_channel_ids": list(row.summary_allowed_channel_ids or []),
+        "summary_allowed_role_ids": list(row.summary_allowed_role_ids or []),
+        "summary_max_messages": row.summary_max_messages,
+        "summary_max_scan_messages": row.summary_max_scan_messages,
+        "summary_quota_guild_daily": row.summary_quota_guild_daily,
+        "summary_quota_user_daily": row.summary_quota_user_daily,
+        "summary_quota_channel_daily": row.summary_quota_channel_daily,
+        "summary_quota_tokens_daily": row.summary_quota_tokens_daily,
     }
+
+
+def normalize_settings_payload(data: dict[str, Any]) -> dict[str, Any]:
+    normalized = {**DEFAULT_SUMMARY_SETTINGS, **data}
+    normalized["summary_allowed_channel_ids"] = [
+        int(channel_id) for channel_id in normalized.get("summary_allowed_channel_ids") or []
+    ]
+    normalized["summary_allowed_role_ids"] = [
+        int(role_id) for role_id in normalized.get("summary_allowed_role_ids") or []
+    ]
+    normalized["summary_max_messages"] = min(max(int(normalized["summary_max_messages"]), 1), 2000)
+    normalized["summary_max_scan_messages"] = min(
+        max(int(normalized["summary_max_scan_messages"]), normalized["summary_max_messages"]),
+        5000,
+    )
+    return normalized
 
 
 class GuildSettingsRepository:
@@ -40,6 +80,7 @@ class GuildSettingsRepository:
             "youtube_check_interval": youtube_check_interval,
             "youtube_announce_channel_id": youtube_announce_channel_id,
         }
+        defaults = normalize_settings_payload(defaults)
         async with self._session_factory() as session:
             stmt = (
                 insert(GuildSettings)
@@ -59,6 +100,7 @@ class GuildSettingsRepository:
             return [_settings_to_dict(row) for row in rows]
 
     async def upsert(self, data: dict[str, Any]) -> dict[str, Any]:
+        data = normalize_settings_payload(data)
         stmt = (
             insert(GuildSettings)
             .values(**data)
@@ -69,6 +111,16 @@ class GuildSettingsRepository:
                     "twitch_announce_channel_id": data.get("twitch_announce_channel_id"),
                     "youtube_check_interval": data["youtube_check_interval"],
                     "youtube_announce_channel_id": data.get("youtube_announce_channel_id"),
+                    "timezone": data["timezone"],
+                    "language": data["language"],
+                    "summary_allowed_channel_ids": data["summary_allowed_channel_ids"],
+                    "summary_allowed_role_ids": data["summary_allowed_role_ids"],
+                    "summary_max_messages": data["summary_max_messages"],
+                    "summary_max_scan_messages": data["summary_max_scan_messages"],
+                    "summary_quota_guild_daily": data["summary_quota_guild_daily"],
+                    "summary_quota_user_daily": data["summary_quota_user_daily"],
+                    "summary_quota_channel_daily": data["summary_quota_channel_daily"],
+                    "summary_quota_tokens_daily": data["summary_quota_tokens_daily"],
                     "updated_at": func.now(),
                 },
             )
@@ -110,3 +162,61 @@ class GuildSettingsRepository:
                 raise RuntimeError(f"Guild settings not initialized: {guild_id}")
             row.youtube_announce_channel_id = channel_id
             await session.commit()
+
+    async def update_summary_field(self, guild_id: int, field: str, value: Any) -> dict[str, Any]:
+        if field not in DEFAULT_SUMMARY_SETTINGS:
+            raise ValueError(f"Unsupported summary setting: {field}")
+        async with self._session_factory() as session:
+            row = await session.get(GuildSettings, guild_id)
+            if row is None:
+                raise RuntimeError(f"Guild settings not initialized: {guild_id}")
+            setattr(row, field, value)
+            await session.commit()
+            await session.refresh(row)
+            return _settings_to_dict(row)
+
+    async def update_timezone(self, guild_id: int, timezone: str) -> dict[str, Any]:
+        return await self.update_summary_field(guild_id, "timezone", timezone)
+
+    async def update_language(self, guild_id: int, language: str) -> dict[str, Any]:
+        return await self.update_summary_field(guild_id, "language", language)
+
+    async def update_summary_max_messages(self, guild_id: int, max_messages: int) -> dict[str, Any]:
+        max_messages = min(max(int(max_messages), 1), 2000)
+        async with self._session_factory() as session:
+            row = await session.get(GuildSettings, guild_id)
+            if row is None:
+                raise RuntimeError(f"Guild settings not initialized: {guild_id}")
+            row.summary_max_messages = max_messages
+            if row.summary_max_scan_messages < max_messages:
+                row.summary_max_scan_messages = max_messages
+            await session.commit()
+            await session.refresh(row)
+            return _settings_to_dict(row)
+
+    async def mutate_summary_id_list(
+        self,
+        guild_id: int,
+        field: str,
+        action: str,
+        value: int | None = None,
+    ) -> dict[str, Any]:
+        if field not in {"summary_allowed_channel_ids", "summary_allowed_role_ids"}:
+            raise ValueError(f"Unsupported id-list setting: {field}")
+        async with self._session_factory() as session:
+            row = await session.get(GuildSettings, guild_id)
+            if row is None:
+                raise RuntimeError(f"Guild settings not initialized: {guild_id}")
+            current = list(getattr(row, field) or [])
+            if action == "add" and value is not None:
+                current = sorted(set(current) | {int(value)})
+            elif action == "remove" and value is not None:
+                current = [item for item in current if item != int(value)]
+            elif action == "clear":
+                current = []
+            elif action != "list":
+                raise ValueError(f"Unsupported id-list action: {action}")
+            setattr(row, field, current)
+            await session.commit()
+            await session.refresh(row)
+            return _settings_to_dict(row)
