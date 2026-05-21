@@ -76,9 +76,7 @@ def fake_completion(content):
 
 async def fake_create_chat_completion(**_params):
     return fake_completion(
-        "**Resume**\n"
-        "Simulation locale: les 20 derniers messages valides ont ete selectionnes.\n\n"
-        "**Points importants**\n"
+        "- Les 20 derniers messages valides ont ete selectionnes.\n"
         "- Aucun appel Discord ou OpenAI n'a ete effectue.\n"
         "- La selection ignore l'age des messages quand seul count_limit est fourni."
     )

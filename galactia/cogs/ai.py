@@ -43,9 +43,10 @@ MAX_SUMMARY_MESSAGES = 500
 ABSOLUTE_MAX_SUMMARY_MESSAGES = 2000
 ABSOLUTE_MAX_SCAN_MESSAGES = 5000
 DEFAULT_SUMMARY_MESSAGES = 100
+DEFAULT_TIME_RANGE_SUMMARY_MESSAGES = 150
 AI_ALLOWED_MENTIONS = discord.AllowedMentions.none()
 SUMMARY_PRESETS = ("catchup", "decisions", "actions", "raid", "drama", "funny")
-SUMMARY_PROMPT_VERSION = "summary_single.v2"
+SUMMARY_PROMPT_VERSION = "summary_single.v3"
 INTENT_PROMPT_VERSION = "intent.v2"
 CONFIG_PERMISSION_MESSAGE = (
     "Le résumé IA n’est pas autorisé dans ce salon ou pour ton rôle sur cette guilde."
@@ -873,7 +874,7 @@ def clamp_time_range_to_allowed_bounds(
             result.matched_rule,
         )
         notices.append(
-            "⚠️ La date de début a été ajustée au 15/10/2024 (limite minimale)."
+            "La date de début a été ajustée au 15/10/2024 (limite minimale)."
         )
         start = minimum_date
 
@@ -907,21 +908,19 @@ async def handle_time_range(
         if intent.count_limit > max_messages:
             logging.info("count_limit reduced to maximum.")
             fallback_notices.append(
-                f"⚠️ Le nombre de messages demandé a été réduit à {max_messages} (maximum autorisé)."
+                f"Le nombre de messages demandé a été réduit à {max_messages} (maximum autorisé)."
             )
         limit = min(intent.count_limit, max_messages)
         logging.info("count_limit normalized: %d.", limit)
     elif intent.time_limit:
-        limit = max_messages
-        logging.info("No count_limit with time_limit; fallback to configured max messages.")
-        fallback_notices.append(
-            f"ℹ️ Aucun nombre de messages précisé → récupération de {max_messages} messages max dans la plage de temps."
-        )
+        limit = min(DEFAULT_TIME_RANGE_SUMMARY_MESSAGES, max_messages)
+        logging.info("No count_limit with time_limit; fallback to fast default messages.")
+        fallback_notices.append(f"Aucun nombre précisé → résumé sur {limit} messages max.")
     else:
         limit = DEFAULT_SUMMARY_MESSAGES
         logging.info("No count_limit nor time_limit; fallback to 100 messages.")
         fallback_notices.append(
-            "ℹ️ Aucun nombre de messages ni plage de temps précisé → résumé sur les 100 derniers messages."
+            "Aucun nombre de messages ni plage de temps précisé → résumé sur les 100 derniers messages."
         )
 
     if intent.time_limit:
@@ -938,7 +937,7 @@ async def handle_time_range(
         start = now - timedelta(days=1)
         logging.info("No time_limit; fallback to last 24h.")
         fallback_notices.append(
-            "ℹ️ Aucun intervalle de temps précisé → résumé sur les dernières 24h."
+            "Aucun intervalle de temps précisé → résumé sur les dernières 24h."
         )
 
     return start, end, limit, fallback_notices
@@ -1098,16 +1097,25 @@ def format_summary_window(start, end) -> str:
     )
 
 
-def summary_feedback_line(request: SummaryRequest, fetch_result: FetchMessagesResult, batch_notice: str = "") -> str:
+def summary_feedback_line(request: SummaryRequest, fetch_result: FetchMessagesResult) -> str:
     if request.is_cross_channel:
         return (
-            f"ℹ️ Résumé de {fetch_result.messages_selected} messages de "
-            f"{channel_label(request.channel)}, {fetch_result.messages_ignored} ignorés.{batch_notice}"
+            f"Résumé de {fetch_result.messages_selected} messages de "
+            f"{channel_label(request.channel)}."
         )
-    return (
-        f"ℹ️ Résumé de {fetch_result.messages_selected} messages, "
-        f"{fetch_result.messages_ignored} ignorés.{batch_notice}"
-    )
+    return f"Résumé de {fetch_result.messages_selected} messages."
+
+
+def merge_summary_intro(*parts: str) -> str:
+    cleaned = []
+    for part in parts:
+        text = (part or "").strip()
+        if not text:
+            continue
+        text = re.sub(r"^[ℹ️⚠️\s]+", "", text).strip()
+        if text:
+            cleaned.append(text)
+    return " ".join(cleaned)
 
 
 async def send_summary_content(responder, content: str):
@@ -1155,31 +1163,45 @@ async def send_summary_response(
         return None
 
     summary = await generate_summary(messages, create_chat_completion, focus=focus)
-    if fallback_notices:
-        summary = "\n".join(fallback_notices) + "\n\n" + summary
 
     if not summary.startswith("❌"):
-        summary = (
-            f"ℹ️ Résumé de {stats.messages_selected} messages, "
-            f"{stats.messages_ignored} ignorés.\n\n{summary}"
+        intro = merge_summary_intro(
+            f"Résumé de {stats.messages_selected} messages.",
+            *fallback_notices,
         )
+        summary = f"{intro}\n\n{summary}" if intro else summary
 
     await send_summary_text(thinking, channel, summary)
     return summary
 
 
-async def generate_summary_result(messages, focus: str | None, preset: str) -> SummaryGenerationResult:
+async def generate_summary_result(
+    messages,
+    focus: str | None,
+    preset: str,
+    selection_mode: str = "latest",
+) -> SummaryGenerationResult:
     try:
         result = await generate_summary(
             messages,
             create_chat_completion,
             focus=focus,
             preset=preset,
+            selection_mode=selection_mode,
             return_result=True,
         )
     except TypeError:
-        summary_text = await generate_summary(messages, create_chat_completion, focus=focus)
-        return SummaryGenerationResult(text=summary_text)
+        try:
+            result = await generate_summary(
+                messages,
+                create_chat_completion,
+                focus=focus,
+                preset=preset,
+                return_result=True,
+            )
+        except TypeError:
+            summary_text = await generate_summary(messages, create_chat_completion, focus=focus)
+            return SummaryGenerationResult(text=summary_text)
 
     if isinstance(result, SummaryGenerationResult):
         return result
@@ -1426,19 +1448,17 @@ class AICog(commands.Cog):
                 fetch_result.messages,
                 intent.focus,
                 effective_preset,
+                intent.selection_mode,
             )
             summary = generation.text
-            if fallback_notices:
-                summary = "\n".join(fallback_notices) + "\n\n" + summary
 
             response_text = summary
             if not summary.startswith("❌"):
-                batch_notice = (
-                    f" Traitement en {generation.chunks_processed} lots."
-                    if generation.chunks_processed > 1
-                    else ""
+                intro = merge_summary_intro(
+                    summary_feedback_line(request, fetch_result),
+                    *fallback_notices,
                 )
-                response_text = f"{summary_feedback_line(request, fetch_result, batch_notice)}\n\n{summary}"
+                response_text = f"{intro}\n\n{summary}" if intro else summary
 
             await send_summary_content(responder, response_text)
             if response_text and not response_text.startswith("❌"):

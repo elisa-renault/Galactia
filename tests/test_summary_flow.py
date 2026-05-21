@@ -31,6 +31,7 @@ from galactia.cogs.ai import (
 from galactia.ai_service import AIService
 from galactia.handlers.summary import (
     FetchMessagesResult,
+    SUMMARY_MAP_TIMEOUT_SECONDS,
     SUMMARY_OPENAI_TIMEOUT_SECONDS,
     fetch_valid_messages,
     generate_summary,
@@ -502,7 +503,8 @@ def test_cross_channel_slash_option_fetches_target_and_responds_in_invocation(mo
     assert result.status == "sent"
     assert seen["channel"] is target
     assert seen["recorded_channel_id"] == 20
-    assert "Résumé de 1 messages de #raid, 0 ignorés" in interaction.edits[-1]
+    assert "Résumé de 1 messages de #raid." in interaction.edits[-1]
+    assert "ignorés" not in interaction.edits[-1]
     assert cog._channel_cooldowns[(1, 20)] > 0
 
 
@@ -877,8 +879,50 @@ def test_slash_summary_uses_shared_pipeline_and_public_response(monkeypatch):
     assert result.status == "sent"
     assert interaction.response.defer_kwargs == {"thinking": True, "ephemeral": False}
     assert interaction.edits
-    assert "Résumé de 2 messages, 2 ignorés" in interaction.edits[-1]
+    assert "Résumé de 2 messages." in interaction.edits[-1]
+    assert "ignorés" not in interaction.edits[-1]
+    assert "ℹ️" not in interaction.edits[-1]
     assert interaction.edit_kwargs[-1]["allowed_mentions"] is not None
+
+
+def test_summary_feedback_merges_initial_notices_without_info_emoji(monkeypatch):
+    bot_user = FakeAuthor(999, "Galactia", bot=True)
+    user = FakeAuthor(1, "Elsia")
+    channel = FakeChannel([], channel_id=10, name="general")
+    interaction = FakeInteraction(channel, user, guild_id=1)
+    cog = AICog(SimpleNamespace(user=bot_user))
+
+    async def fake_parse(_request):
+        return SummaryIntent(summary=True, time_limit="hier"), None
+
+    async def fake_retrieve(*_args, **_kwargs):
+        messages = [FakeMessage("m1", user, dt(10, 1))]
+        return FetchMessagesResult(
+            messages=messages,
+            messages_scanned=1,
+            messages_selected=1,
+            messages_ignored=0,
+        )
+
+    async def fake_generate_summary(_messages, _create_chat_completion, focus=None):
+        return "- Un point utile."
+
+    monkeypatch.setattr(
+        "galactia.cogs.ai.parse_summary_request_intent_and_authors",
+        fake_parse,
+    )
+    monkeypatch.setattr("galactia.cogs.ai.retrieve_messages", fake_retrieve)
+    monkeypatch.setattr("galactia.cogs.ai.generate_summary", fake_generate_summary)
+
+    result = run(cog.handle_summary_interaction(interaction, "hier"))
+
+    assert result.status == "sent"
+    response = interaction.edits[-1]
+    first_line = response.splitlines()[0]
+    assert first_line == "Résumé de 1 messages. Aucun nombre précisé → résumé sur 150 messages max."
+    assert "ℹ️" not in response
+    assert "⚠️" not in response
+    assert "\n\nAucun nombre précisé" not in response
 
 
 def test_slash_summary_long_response_uses_public_followups(monkeypatch):
@@ -1081,6 +1125,41 @@ def test_fetch_valid_messages_excludes_invalid_messages_and_filters_authors():
     assert [m.content for m in result] == ["kept"]
 
 
+def test_fetch_valid_messages_excludes_summary_invocations_but_keeps_plain_bot_name():
+    bot_user = FakeAuthor(999, "Galactia", bot=True)
+    user = FakeAuthor(1, "Elsia")
+    same_bot_id = FakeAuthor(999, "Galactia Dev", bot=True)
+    messages = [
+        FakeMessage("direct mention", user, dt(10, 0), mentions=[same_bot_id]),
+        FakeMessage("raw <@999> mention", user, dt(10, 1)),
+        FakeMessage("raw <@!999> mention", user, dt(10, 2)),
+        FakeMessage("/summary les 20 derniers", user, dt(10, 3)),
+        FakeMessage("Galactia est mentionnée sans ping", user, dt(10, 4)),
+        FakeMessage("message normal", user, dt(10, 5)),
+    ]
+    channel = FakeChannel(messages)
+
+    result = run(
+        fetch_valid_messages(
+            SimpleNamespace(user=bot_user),
+            channel,
+            start=dt(9),
+            end=dt(11),
+            limit=10,
+            selection_mode="earliest",
+            include_stats=True,
+        )
+    )
+
+    assert [m.content for m in result.messages] == [
+        "Galactia est mentionnée sans ping",
+        "message normal",
+    ]
+    assert result.messages_scanned == 6
+    assert result.messages_selected == 2
+    assert result.messages_ignored == 4
+
+
 def test_fetch_limit_is_bounded_to_one_to_two_thousand():
     assert normalize_fetch_limit(None) == 100
     assert normalize_fetch_limit(999) == 999
@@ -1142,6 +1221,19 @@ def test_versioned_prompt_loader_renders_expected_placeholders():
     assert "{current_channel_name}" not in rendered
 
 
+def test_summary_prompt_requests_short_adaptive_output_without_sources():
+    rendered = render_prompt(
+        "summary_single.v3.md",
+        preset="catchup",
+        focus="aucun focus spécifique",
+    )
+
+    assert "3 à 7 bullet points" in rendered
+    assert "petit paragraphe court" in rendered
+    assert "N'ajoute pas de section \"Sources\"" in rendered
+    assert "Ne transforme pas les anciens appels à Galactia" in rendered
+
+
 def test_golden_summary_intents_fixture_is_valid():
     cases = load_golden_intents()
 
@@ -1189,6 +1281,25 @@ def test_handle_time_range_caps_high_count_and_rejects_low_count():
         run(handle_time_range(SummaryIntent(summary=True, count_limit=0)))
 
 
+def test_handle_time_range_time_limit_without_count_uses_fast_default():
+    start, end, limit, notices = run(
+        handle_time_range(SummaryIntent(summary=True, time_limit="hier"), max_messages=500)
+    )
+
+    assert start is not None
+    assert end is not None
+    assert limit == 150
+    assert any("150 messages max" in notice for notice in notices)
+
+
+def test_handle_time_range_explicit_count_keeps_configured_cap():
+    _, _, limit, _ = run(
+        handle_time_range(SummaryIntent(summary=True, count_limit=500), max_messages=500)
+    )
+
+    assert limit == 500
+
+
 def test_handle_time_range_count_limit_without_time_has_no_lower_date_bound():
     start, end, limit, notices = run(
         handle_time_range(SummaryIntent(summary=True, count_limit=20))
@@ -1217,7 +1328,7 @@ def test_handle_time_range_clamps_period_partially_before_minimum_date():
     assert start.day == 15
     assert end.month == 12
     assert end.day == 31
-    assert limit == 500
+    assert limit == 150
     assert any("15/10/2024" in notice for notice in notices)
 
 
@@ -1324,6 +1435,59 @@ def test_generate_summary_timeout_has_readable_error():
     assert summary.startswith("❌ Résumé échoué :")
     assert summary != "❌ Résumé échoué : "
     assert "délai" in summary
+
+
+def test_generate_summary_compacts_long_messages_before_prompt():
+    user = FakeAuthor(1, "Elsia")
+    long_content = "ligne 1\n\n" + ("mot " * 500) + "FIN_TRES_LOINTAINE"
+    message = FakeMessage(long_content, user, dt(10), jump_url="https://discord.com/channels/1/2/3")
+    seen_params = {}
+
+    async def fake_create_chat_completion(**params):
+        seen_params.update(params)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="- ok"))]
+        )
+
+    result = run(generate_summary([message], fake_create_chat_completion, return_result=True))
+    user_prompt = seen_params["messages"][1]["content"]
+
+    assert result.prompt_version == "summary_single.v3"
+    assert "FIN_TRES_LOINTAINE" not in user_prompt
+    assert "discord.com/channels" not in user_prompt
+    assert "ligne 1 mot mot" in user_prompt
+    assert "\n\n\n" not in user_prompt
+
+
+def test_generate_summary_medium_long_messages_stays_single_pass_after_compaction():
+    user = FakeAuthor(1, "Elsia")
+    messages = [
+        FakeMessage(f"message {i} " + ("abcdefghij " * 250), user, dt(10, i % 60))
+        for i in range(185)
+    ]
+    calls = []
+
+    async def fake_create_chat_completion(**params):
+        calls.append(params)
+        return SimpleNamespace(
+            model="gpt-test",
+            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1, total_tokens=2),
+            choices=[SimpleNamespace(message=SimpleNamespace(content="- résumé rapide"))],
+        )
+
+    result = run(
+        generate_summary(
+            messages,
+            fake_create_chat_completion,
+            preset="catchup",
+            return_result=True,
+        )
+    )
+
+    assert result.prompt_version == "summary_single.v3"
+    assert result.chunks_processed == 1
+    assert len(calls) == 1
+    assert calls[0]["timeout"] == SUMMARY_OPENAI_TIMEOUT_SECONDS
 
 
 def test_cooldown_blocks_user_and_channel_requests():
@@ -1734,11 +1898,11 @@ def test_slash_preset_overrides_detected_intent(monkeypatch):
     assert seen["preset"] == "drama"
 
 
-def test_generate_summary_map_reduce_adds_cited_jump_links():
+def test_generate_summary_map_reduce_stays_simple_without_sources():
     user = FakeAuthor(1, "Elsia")
     messages = [
         FakeMessage(
-            f"message {i}",
+            f"message {i} " + ("detail " * 220),
             user,
             dt(10, i % 60),
             jump_url=f"https://discord.com/channels/1/10/{i}",
@@ -1746,12 +1910,20 @@ def test_generate_summary_map_reduce_adds_cited_jump_links():
         for i in range(501)
     ]
     calls = []
+    active_calls = 0
+    max_active_calls = 0
 
     async def fake_create_chat_completion(**params):
+        nonlocal active_calls, max_active_calls
         calls.append(params)
+        active_calls += 1
+        max_active_calls = max(max_active_calls, active_calls)
+        await asyncio.sleep(0.01)
+        active_calls -= 1
         content = (
             "**Résumé**\nPoint important [S1].\n\n"
-            "**Points importants**\n- Source utile [S1]."
+            "**Points importants**\n- Source utile [S1].\n\n"
+            "**Sources**\n- [S1](https://discord.com/channels/1/10/0)"
         )
         return SimpleNamespace(
             model="gpt-test",
@@ -1769,7 +1941,11 @@ def test_generate_summary_map_reduce_adds_cited_jump_links():
     )
 
     assert isinstance(result, SummaryGenerationResult)
-    assert len(calls) >= 2
-    assert result.prompt_version == "summary_map.v1+summary_reduce.v1"
-    assert "**Sources**" in result.text
-    assert "https://discord.com/channels/1/10/0" in result.text
+    assert len(calls) >= 3
+    assert max_active_calls <= 3
+    assert any(call["timeout"] == SUMMARY_MAP_TIMEOUT_SECONDS for call in calls)
+    assert result.prompt_version == "summary_map.v2+summary_reduce.v2"
+    assert "**Sources**" not in result.text
+    assert "[S1]" not in result.text
+    assert "discord.com/channels" not in result.text
+    assert all("[S1]" not in str(call["messages"]) for call in calls)
