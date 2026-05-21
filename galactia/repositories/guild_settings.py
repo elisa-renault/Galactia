@@ -15,6 +15,7 @@ DEFAULT_SUMMARY_SETTINGS = {
     "setup_completed_at": None,
     "setup_completed_by_id": None,
     "setup_channel_id": None,
+    "galactia_manager_role_ids": [],
     "summary_enabled": False,
     "summary_access_mode": "admins_only",
     "twitch_enabled": False,
@@ -38,6 +39,7 @@ def _settings_to_dict(row: GuildSettings) -> dict[str, Any]:
         "setup_completed_at": row.setup_completed_at,
         "setup_completed_by_id": row.setup_completed_by_id,
         "setup_channel_id": row.setup_channel_id,
+        "galactia_manager_role_ids": list(row.galactia_manager_role_ids or []),
         "twitch_check_interval": row.twitch_check_interval,
         "twitch_announce_channel_id": row.twitch_announce_channel_id,
         "twitch_enabled": row.twitch_enabled,
@@ -77,6 +79,9 @@ def normalize_settings_payload(data: dict[str, Any]) -> dict[str, Any]:
     ]
     normalized["summary_allowed_role_ids"] = [
         int(role_id) for role_id in normalized.get("summary_allowed_role_ids") or []
+    ]
+    normalized["galactia_manager_role_ids"] = [
+        int(role_id) for role_id in normalized.get("galactia_manager_role_ids") or []
     ]
     normalized["summary_max_messages"] = min(max(int(normalized["summary_max_messages"]), 1), 2000)
     normalized["summary_max_scan_messages"] = min(
@@ -144,6 +149,7 @@ class GuildSettingsRepository:
                     "setup_completed_at": data.get("setup_completed_at"),
                     "setup_completed_by_id": data.get("setup_completed_by_id"),
                     "setup_channel_id": data.get("setup_channel_id"),
+                    "galactia_manager_role_ids": data["galactia_manager_role_ids"],
                     "timezone": data["timezone"],
                     "language": data["language"],
                     "summary_enabled": data["summary_enabled"],
@@ -341,7 +347,7 @@ class GuildSettingsRepository:
         action: str,
         value: int | None = None,
     ) -> dict[str, Any]:
-        if field not in {"summary_allowed_channel_ids", "summary_allowed_role_ids"}:
+        if field not in {"summary_allowed_channel_ids", "summary_allowed_role_ids", "galactia_manager_role_ids"}:
             raise ValueError(f"Unsupported id-list setting: {field}")
         async with self._session_factory() as session:
             row = await session.get(GuildSettings, guild_id)

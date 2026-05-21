@@ -9,8 +9,9 @@ from urllib.parse import urlparse
 
 import aiohttp
 import discord
-from discord import app_commands, Permissions
+from discord import app_commands
 from discord.ext import commands, tasks
+from galactia.permissions import can_manage_galactia
 from galactia.repositories import GuildSettingsRepository, YouTubeFollowRepository
 from galactia.settings import settings
 
@@ -115,6 +116,9 @@ class YouTubeNotifier(commands.Cog):
             youtube_announce_channel_id=settings.youtube_announce_channel_id,
         )
 
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await can_manage_galactia(interaction)
+
     async def _module_enabled(self, guild_id: int) -> bool:
         cfg = await self.get_or_create_guild_settings(guild_id)
         return bool(cfg.get("youtube_enabled", False))
@@ -140,7 +144,6 @@ class YouTubeNotifier(commands.Cog):
     youtube_group = app_commands.Group(
         name="youtube",
         description="Manage YouTube new-video notifications",
-        default_permissions=Permissions(administrator=True),
     )
 
     # -------- add --------

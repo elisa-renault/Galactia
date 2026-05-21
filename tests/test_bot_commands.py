@@ -5,7 +5,7 @@ import pytest
 from discord.ext import commands
 
 from galactia.bot import command_sync_target, register_extension_command_groups, sync_slash_commands
-from galactia.cogs.admin import GalactiaAdminCog
+from galactia.cogs.admin import GalactiaAdminCog, GalactiaSetupView, _format_channel_scope
 
 
 class FakeCog:
@@ -121,6 +121,7 @@ async def test_admin_group_declares_expected_commands_without_status_alias():
             "max_messages",
             "allowed_channel",
             "allowed_role",
+            "manager_role",
         }.issubset(config_commands)
 
         setup_group = group_commands["setup"]
@@ -128,3 +129,21 @@ async def test_admin_group_declares_expected_commands_without_status_alias():
         assert {"start", "summary", "twitch", "youtube", "finish"}.issubset(setup_commands)
     finally:
         await bot.close()
+
+
+@pytest.mark.asyncio
+async def test_setup_view_contains_dashboard_controls():
+    bot = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+    try:
+        view = GalactiaSetupView(bot, guild_id=123)
+        labels = {getattr(item, "label", None) for item in view.children}
+        select_types = {type(item).__name__ for item in view.children}
+
+        assert {"Resume IA", "Twitch", "YouTube", "Tous les salons", "Verifier permissions", "Terminer setup"}.issubset(labels)
+        assert {"SummaryChannelSelect", "ManagerRoleSelect"}.issubset(select_types)
+    finally:
+        await bot.close()
+
+
+def test_empty_summary_channel_list_is_displayed_as_all_channels():
+    assert _format_channel_scope({"summary_allowed_channel_ids": []}) == "Tous les salons accessibles"

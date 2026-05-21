@@ -7,8 +7,9 @@ from typing import Dict, List, Optional
 
 import aiohttp
 import discord
-from discord import app_commands, Permissions
+from discord import app_commands
 from discord.ext import commands, tasks
+from galactia.permissions import can_manage_galactia
 from galactia.repositories import GuildSettingsRepository, TwitchFollowRepository
 from galactia.settings import settings
 
@@ -100,6 +101,9 @@ class TwitchNotifier(commands.Cog):
             youtube_announce_channel_id=settings.youtube_announce_channel_id,
         )
 
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await can_manage_galactia(interaction)
+
     async def refresh_poll_interval(self):
         configs = await self.guild_settings_repo.list_all()
         intervals = [
@@ -117,7 +121,6 @@ class TwitchNotifier(commands.Cog):
     twitch_group = app_commands.Group(
         name="twitch",
         description="Manage Twitch live notifications",
-        default_permissions=Permissions(administrator=True),
     )
 
     # ----- Admin commands -----
