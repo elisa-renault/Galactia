@@ -30,12 +30,19 @@ class GuildSettings(TimestampMixin, Base):
     __tablename__ = "guild_settings"
 
     guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    setup_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    setup_completed_by_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    setup_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     twitch_check_interval: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     twitch_announce_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    twitch_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     youtube_check_interval: Mapped[int] = mapped_column(Integer, nullable=False, default=300)
     youtube_announce_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    youtube_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     timezone: Mapped[str] = mapped_column(Text, nullable=False, default="Europe/Paris", server_default="Europe/Paris")
     language: Mapped[str] = mapped_column(Text, nullable=False, default="fr", server_default="fr")
+    summary_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    summary_access_mode: Mapped[str] = mapped_column(Text, nullable=False, default="admins_only", server_default="admins_only")
     summary_allowed_channel_ids: Mapped[list[int]] = mapped_column(
         ARRAY(BigInteger),
         nullable=False,

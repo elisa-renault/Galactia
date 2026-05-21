@@ -69,6 +69,9 @@ AMBIGUOUS_TARGET_CHANNEL_MESSAGE = "Indique un seul salon à résumer."
 CROSS_GUILD_CHANNEL_MESSAGE = "Je ne peux résumer que des salons de ce serveur."
 TARGET_CHANNEL_NOT_ALLOWED_MESSAGE = "Le résumé IA n’est pas autorisé pour ce salon."
 ROLE_NOT_ALLOWED_MESSAGE = "Le résumé IA n’est pas autorisé pour ton rôle sur cette guilde."
+ADMIN_ONLY_MESSAGE = "Le resume IA est reserve aux administrateurs sur cette guilde."
+SETUP_REQUIRED_MESSAGE = "Un administrateur doit terminer `/galactia setup` avant d'utiliser le resume IA."
+QUOTA_EXCEEDED_MESSAGE = "Le quota de resume IA est atteint pour aujourd'hui. Reessaie demain."
 USER_TARGET_ACCESS_MESSAGE = "Tu n’as pas accès au salon à résumer."
 BOT_TARGET_ACCESS_MESSAGE = "Je n’ai pas accès à l’historique de ce salon."
 TIME_RANGE_FAILURE_MESSAGE = (
@@ -300,6 +303,8 @@ class SummaryResult:
         "empty",
         "cache_hit",
         "cooldown",
+        "quota_exceeded",
+        "setup_required",
         "not_summary",
         "wrong_channel",
         "error",
@@ -960,7 +965,14 @@ async def retrieve_messages(
 
 
 def default_summary_settings(guild_id: int | None = None) -> dict:
-    return {"guild_id": guild_id, **DEFAULT_SUMMARY_SETTINGS}
+    # Unit/local fallback keeps the historical summary behavior when the DB is
+    # unavailable. Persisted new guilds still use safe disabled defaults.
+    return {
+        "guild_id": guild_id,
+        **DEFAULT_SUMMARY_SETTINGS,
+        "summary_enabled": True,
+        "summary_access_mode": "everyone",
+    }
 
 
 async def load_summary_settings(guild_id: int | None) -> dict:
@@ -993,12 +1005,22 @@ def author_role_ids(author) -> set[int]:
 
 
 def validate_summary_config_access(request: SummaryRequest, cfg: dict) -> str | None:
+    if not cfg.get("summary_enabled", True):
+        return SETUP_REQUIRED_MESSAGE
+
     allowed_channels = {int(channel_id) for channel_id in cfg.get("summary_allowed_channel_ids") or []}
     if allowed_channels and request.channel_id not in allowed_channels:
         return TARGET_CHANNEL_NOT_ALLOWED_MESSAGE
 
     allowed_roles = {int(role_id) for role_id in cfg.get("summary_allowed_role_ids") or []}
-    if allowed_roles and not author_is_admin(request.author):
+    access_mode = cfg.get("summary_access_mode")
+    if not access_mode:
+        access_mode = "allowed_roles" if allowed_roles else "everyone"
+
+    if access_mode == "admins_only" and not author_is_admin(request.author):
+        return ADMIN_ONLY_MESSAGE
+
+    if access_mode == "allowed_roles" and not author_is_admin(request.author):
         if not (allowed_roles & author_role_ids(request.author)):
             return ROLE_NOT_ALLOWED_MESSAGE
     return None
@@ -1032,6 +1054,32 @@ def log_soft_quota_state(cfg: dict, usage: dict | None) -> None:
         exceeded.append("guild_tokens")
     if exceeded:
         logging.info("Summary soft quota exceeded: %s.", ",".join(exceeded))
+
+
+def summary_quota_exceeded_reasons(cfg: dict, usage: dict | None) -> list[str]:
+    if not usage:
+        return []
+    guild_usage = usage.get("guild", {})
+    user_usage = usage.get("user", {})
+    channel_usage = usage.get("channel", {})
+    exceeded = []
+    if int(cfg.get("summary_quota_guild_daily") or 0) and guild_usage.get("requests", 0) >= int(
+        cfg.get("summary_quota_guild_daily") or 0
+    ):
+        exceeded.append("guild_requests")
+    if int(cfg.get("summary_quota_user_daily") or 0) and user_usage.get("requests", 0) >= int(
+        cfg.get("summary_quota_user_daily") or 0
+    ):
+        exceeded.append("user_requests")
+    if int(cfg.get("summary_quota_channel_daily") or 0) and channel_usage.get("requests", 0) >= int(
+        cfg.get("summary_quota_channel_daily") or 0
+    ):
+        exceeded.append("channel_requests")
+    if int(cfg.get("summary_quota_tokens_daily") or 0) and guild_usage.get("tokens", 0) >= int(
+        cfg.get("summary_quota_tokens_daily") or 0
+    ):
+        exceeded.append("guild_tokens")
+    return exceeded
 
 
 async def load_summary_usage_today(request: SummaryRequest) -> dict | None:
@@ -1315,7 +1363,10 @@ class AICog(commands.Cog):
                 request.user_id,
             )
             await responder.edit_initial(permission_error)
-            return SummaryResult(status="wrong_channel", response_text=permission_error)
+            status = "setup_required" if permission_error == SETUP_REQUIRED_MESSAGE else "wrong_channel"
+            if status == "setup_required":
+                await record_ai_request_event(request, status=status)
+            return SummaryResult(status=status, response_text=permission_error)
 
         try:
             intent, authors = await parse_summary_request_intent_and_authors(request)
@@ -1341,6 +1392,20 @@ class AICog(commands.Cog):
         effective_preset = request.preset_override or intent.preset or "catchup"
         usage_today = await load_summary_usage_today(request)
         log_soft_quota_state(summary_settings, usage_today)
+        quota_reasons = summary_quota_exceeded_reasons(summary_settings, usage_today)
+        if quota_reasons:
+            logging.info("Summary hard quota exceeded: %s.", ",".join(quota_reasons))
+            await responder.edit_initial(QUOTA_EXCEEDED_MESSAGE)
+            await record_ai_request_event(
+                request,
+                status="quota_exceeded",
+                preset=effective_preset,
+                error_type=",".join(quota_reasons),
+            )
+            return SummaryResult(
+                status="quota_exceeded",
+                response_text=QUOTA_EXCEEDED_MESSAGE,
+            )
 
         cooldown = self.check_and_mark_summary_cooldown(request)
         if cooldown:

@@ -105,7 +105,7 @@ class TwitchNotifier(commands.Cog):
         intervals = [
             int(cfg["twitch_check_interval"])
             for cfg in configs
-            if cfg.get("twitch_check_interval")
+            if cfg.get("twitch_check_interval") and cfg.get("twitch_enabled", True)
         ]
         self.check_interval = min(intervals) if intervals else int(settings.twitch_check_interval)
         if self.poller.is_running():
@@ -150,7 +150,12 @@ class TwitchNotifier(commands.Cog):
             )
 
         guild_id = int(interaction.guild_id)
-        await self.get_or_create_guild_settings(guild_id)
+        cfg = await self.get_or_create_guild_settings(guild_id)
+        if not cfg.get("twitch_enabled", False):
+            return await interaction.followup.send(
+                "Twitch is not enabled yet. Run `/galactia setup twitch` first.",
+                ephemeral=True,
+            )
         login = twitch_login.strip().lower()
         exists = await self.stream_repo.exists(guild_id, login, channel.id)
 
@@ -192,6 +197,12 @@ class TwitchNotifier(commands.Cog):
                 "This command must be used in a server.",
                 ephemeral=True,
             )
+        cfg = await self.get_or_create_guild_settings(int(interaction.guild_id))
+        if not cfg.get("twitch_enabled", False):
+            return await interaction.response.send_message(
+                "Twitch is not enabled yet. Run `/galactia setup twitch` first.",
+                ephemeral=True,
+            )
         data = await self.stream_repo.list_by_guild(int(interaction.guild_id))
         if not data:
             return await interaction.response.send_message("No follows yet.", ephemeral=True)
@@ -220,6 +231,12 @@ class TwitchNotifier(commands.Cog):
                 "This command must be used in a server.",
                 ephemeral=True,
             )
+        cfg = await self.get_or_create_guild_settings(int(interaction.guild_id))
+        if not cfg.get("twitch_enabled", False):
+            return await interaction.followup.send(
+                "Twitch is not enabled yet. Run `/galactia setup twitch` first.",
+                ephemeral=True,
+            )
 
         login = twitch_login.strip().lower()
         removed = await self.stream_repo.remove_by_login(int(interaction.guild_id), login)
@@ -236,6 +253,12 @@ class TwitchNotifier(commands.Cog):
         if interaction.guild_id is None:
             return await interaction.response.send_message(
                 "This command must be used in a server.",
+                ephemeral=True,
+            )
+        cfg = await self.get_or_create_guild_settings(int(interaction.guild_id))
+        if not cfg.get("twitch_enabled", False):
+            return await interaction.response.send_message(
+                "Twitch is not enabled yet. Run `/galactia setup twitch` first.",
                 ephemeral=True,
             )
         data = await self.stream_repo.list_by_guild(int(interaction.guild_id))
@@ -287,6 +310,12 @@ class TwitchNotifier(commands.Cog):
                 "This command must be used in a server.",
                 ephemeral=True,
             )
+        cfg = await self.get_or_create_guild_settings(int(interaction.guild_id))
+        if not cfg.get("twitch_enabled", False):
+            return await interaction.response.send_message(
+                "Twitch is not enabled yet. Run `/galactia setup twitch` first.",
+                ephemeral=True,
+            )
         data = await self.stream_repo.list_by_guild(int(interaction.guild_id))
         item = next((s for s in data if s["login"] == login), None)
         if not item:
@@ -313,6 +342,7 @@ class TwitchNotifier(commands.Cog):
         channel = self.bot.get_channel(fallback_channel_id) if fallback_channel_id else None
         channel_mention = channel.mention if channel else "None"
         msg = (
+            f"Active: {cfg.get('twitch_enabled', False)}\n"
             f"Intervalle: {cfg['twitch_check_interval']}s "
             f"(poller effectif: {self.check_interval}s)\n"
             f"Salon par defaut: {channel_mention}"
@@ -333,7 +363,12 @@ class TwitchNotifier(commands.Cog):
                 ephemeral=True,
             )
         guild_id = int(interaction.guild_id)
-        await self.get_or_create_guild_settings(guild_id)
+        cfg = await self.get_or_create_guild_settings(guild_id)
+        if not cfg.get("twitch_enabled", False):
+            return await interaction.response.send_message(
+                "Twitch is not enabled yet. Run `/galactia setup twitch` first.",
+                ephemeral=True,
+            )
         await self.guild_settings_repo.update_twitch_interval(guild_id, seconds)
         await self.refresh_poll_interval()
         await interaction.response.send_message(
@@ -352,7 +387,12 @@ class TwitchNotifier(commands.Cog):
                 ephemeral=True,
             )
         guild_id = int(interaction.guild_id)
-        await self.get_or_create_guild_settings(guild_id)
+        cfg = await self.get_or_create_guild_settings(guild_id)
+        if not cfg.get("twitch_enabled", False):
+            return await interaction.response.send_message(
+                "Twitch is not enabled yet. Run `/galactia setup twitch` first.",
+                ephemeral=True,
+            )
         await self.guild_settings_repo.update_twitch_channel(guild_id, channel.id)
         await interaction.response.send_message(
             f"Default channel set to {channel.mention}.", ephemeral=True
@@ -374,6 +414,14 @@ class TwitchNotifier(commands.Cog):
             return
 
         streams = await self.stream_repo.list_all()
+        if not streams:
+            return
+        configs = {int(cfg["guild_id"]): cfg for cfg in await self.guild_settings_repo.list_all()}
+        streams = [
+            item
+            for item in streams
+            if configs.get(int(item["guild_id"]), {}).get("twitch_enabled", False)
+        ]
         if not streams:
             return
         logins = list({s["login"].lower() for s in streams})
@@ -799,36 +847,11 @@ class TwitchNotifier(commands.Cog):
 
 async def setup(bot: commands.Bot):
     """
-    Add the TwitchNotifier cog and (re)register the /twitch command group.
-    If DISCORD_GUILD_ID is set, register commands for that guild only (faster updates).
-    Otherwise register globally.
+    Add the TwitchNotifier cog.
+    Slash command registration is centralized in galactia.bot.
     """
-    # 1) Add the cog with a managed HTTP session
     exit_stack = AsyncExitStack()
     session = await exit_stack.enter_async_context(aiohttp.ClientSession())
     cog = TwitchNotifier(bot, session, exit_stack)
     await bot.add_cog(cog)
     await cog.initialize()
-
-    # 2) (Re)register the /twitch group explicitly
-    try:
-        guild_id = settings.discord_guild_id
-        if guild_id:
-            guild = discord.Object(id=int(guild_id))
-            # Remove any previous definition under the same name for that guild
-            try:
-                bot.tree.remove_command(cog.twitch_group.name, type=cog.twitch_group.type, guild=guild)
-            except Exception:
-                pass
-            bot.tree.add_command(cog.twitch_group, guild=guild)
-            logger.info("Registered /%s group for guild %s", cog.twitch_group.name, guild_id)
-        else:
-            # Global registration
-            try:
-                bot.tree.remove_command(cog.twitch_group.name, type=cog.twitch_group.type)
-            except Exception:
-                pass
-            bot.tree.add_command(cog.twitch_group)
-            logger.info("Registered /%s group (global)", cog.twitch_group.name)
-    except Exception as e:
-        logger.exception("Failed to register /twitch group: %s", e)

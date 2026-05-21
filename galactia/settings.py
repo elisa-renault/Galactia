@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     discord_token: str = Field(env="DISCORD_TOKEN")
     discord_guild_id: int | None = Field(default=None, env="DISCORD_GUILD_ID")
+    discord_command_scope: str = Field(default="global", env="DISCORD_COMMAND_SCOPE")
     twitch_client_id: str = Field(env="TWITCH_CLIENT_ID")
     twitch_client_secret: str = Field(env="TWITCH_CLIENT_SECRET")
     twitch_check_interval: int = Field(default=60, env="TWITCH_CHECK_INTERVAL")
