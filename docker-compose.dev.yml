@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: galactia-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: galactia_dev
+      POSTGRES_USER: galactia_dev
+      POSTGRES_PASSWORD: galactia_dev_password
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - galactia_postgres_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U galactia_dev -d galactia_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  galactia_postgres_dev:

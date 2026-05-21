@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     youtube_check_interval: int = Field(default=300, env="YOUTUBE_CHECK_INTERVAL")
     youtube_announce_channel_id: int | None = Field(default=None, env="YOUTUBE_ANNOUNCE_CHANNEL_ID")
     openai_api_key: str = Field(env="OPENAI_API_KEY")
+    database_url: str | None = Field(default=None, env="DATABASE_URL")
     supabase_database_url: str | None = Field(default=None, env="SUPABASE_DATABASE_URL")
     vite_supabase_project_id: str | None = Field(default=None, env="VITE_SUPABASE_PROJECT_ID")
     vite_supabase_url: str | None = Field(default=None, env="VITE_SUPABASE_URL")
