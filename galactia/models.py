@@ -33,6 +33,12 @@ class GuildSettings(TimestampMixin, Base):
     setup_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     setup_completed_by_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     setup_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    galactia_manager_role_ids: Mapped[list[int]] = mapped_column(
+        ARRAY(BigInteger),
+        nullable=False,
+        default=list,
+        server_default=text("'{}'::bigint[]"),
+    )
     twitch_check_interval: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     twitch_announce_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     twitch_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")

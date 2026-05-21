@@ -6,6 +6,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from galactia.cogs.ai import AI_ALLOWED_MENTIONS, load_summary_settings
+from galactia.permissions import can_manage_galactia
 from galactia.repositories import AIRequestRepository, GuildSettingsRepository
 from galactia.settings import settings
 
@@ -49,6 +50,59 @@ def _configured_channel_ids(cfg: dict) -> list[int]:
     return sorted(set(ids))
 
 
+def _mention_channel(guild: discord.Guild | None, channel_id: int) -> str:
+    channel = guild.get_channel(int(channel_id)) if guild else None
+    return channel.mention if isinstance(channel, discord.TextChannel) else f"`{channel_id}`"
+
+
+def _mention_role(guild: discord.Guild | None, role_id: int) -> str:
+    role = guild.get_role(int(role_id)) if guild else None
+    return role.mention if role else f"`{role_id}`"
+
+
+def _format_channel_scope(cfg: dict, guild: discord.Guild | None = None) -> str:
+    ids = [int(channel_id) for channel_id in cfg.get("summary_allowed_channel_ids") or []]
+    if not ids:
+        return "Tous les salons accessibles"
+    mentions = ", ".join(_mention_channel(guild, channel_id) for channel_id in ids[:8])
+    if len(ids) > 8:
+        mentions += f", +{len(ids) - 8}"
+    return f"{len(ids)} salon(s): {mentions}"
+
+
+def _format_role_scope(cfg: dict, guild: discord.Guild | None, key: str) -> str:
+    ids = [int(role_id) for role_id in cfg.get(key) or []]
+    if not ids:
+        return "aucun"
+    mentions = ", ".join(_mention_role(guild, role_id) for role_id in ids[:8])
+    if len(ids) > 8:
+        mentions += f", +{len(ids) - 8}"
+    return mentions
+
+
+def _setup_panel_content(
+    cfg: dict,
+    guild: discord.Guild | None,
+    *,
+    note: str | None = None,
+) -> str:
+    setup_state = "termine" if cfg.get("setup_completed_at") else "a terminer"
+    permission_gaps = collect_setup_permission_gaps(guild, cfg)
+    content = (
+        "**Setup Galactia**\n"
+        f"- Setup: `{setup_state}`\n"
+        f"- Resume IA: `{_format_enabled(bool(cfg.get('summary_enabled')))}` / `{cfg.get('summary_access_mode')}`\n"
+        f"- Salons resumables: {_format_channel_scope(cfg, guild)}\n"
+        f"- Twitch: `{_format_enabled(bool(cfg.get('twitch_enabled')))}`\n"
+        f"- YouTube: `{_format_enabled(bool(cfg.get('youtube_enabled')))}`\n"
+        f"- Managers Galactia: {_format_role_scope(cfg, guild, 'galactia_manager_role_ids')}\n"
+        f"- Permissions: `{'; '.join(permission_gaps) if permission_gaps else 'ok'}`"
+    )
+    if note:
+        content += f"\n\n{note}"
+    return content
+
+
 def missing_permissions_for_channel(channel: discord.TextChannel, member) -> list[str]:
     perms = channel.permissions_for(member)
     missing = []
@@ -73,6 +127,171 @@ def collect_setup_permission_gaps(guild: discord.Guild | None, cfg: dict) -> lis
     return gaps
 
 
+class SummaryChannelSelect(discord.ui.ChannelSelect):
+    def __init__(self):
+        super().__init__(
+            placeholder="Restreindre les resumes IA a des salons",
+            min_values=1,
+            max_values=10,
+            channel_types=[discord.ChannelType.text],
+            row=3,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        await self.view.set_summary_channels(interaction, self.values)
+
+
+class ManagerRoleSelect(discord.ui.RoleSelect):
+    def __init__(self):
+        super().__init__(
+            placeholder="Definir les roles Galactia Manager",
+            min_values=1,
+            max_values=10,
+            row=4,
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        await self.view.set_manager_roles(interaction, self.values)
+
+
+class GalactiaSetupView(discord.ui.View):
+    def __init__(self, bot: commands.Bot, guild_id: int):
+        super().__init__(timeout=300)
+        self.bot = bot
+        self.guild_id = int(guild_id)
+        self.add_item(SummaryChannelSelect())
+        self.add_item(ManagerRoleSelect())
+
+    async def _guard(self, interaction: discord.Interaction) -> bool:
+        return await can_manage_galactia(interaction)
+
+    async def _settings(self) -> dict:
+        return await load_summary_settings(self.guild_id)
+
+    async def _refresh(self, interaction: discord.Interaction, *, note: str | None = None) -> None:
+        cfg = await self._settings()
+        content = _setup_panel_content(cfg, interaction.guild, note=note)
+        if interaction.response.is_done():
+            await interaction.edit_original_response(content=content, view=self)
+        else:
+            await interaction.response.edit_message(content=content, view=self)
+
+    async def set_summary_channels(self, interaction: discord.Interaction, channels) -> None:
+        if not await self._guard(interaction):
+            return
+        ids = sorted({int(channel.id) for channel in channels if getattr(channel, "id", None) is not None})
+        repo = GuildSettingsRepository()
+        await repo.mutate_summary_id_list(self.guild_id, "summary_allowed_channel_ids", "clear")
+        for channel_id in ids:
+            await repo.mutate_summary_id_list(
+                self.guild_id,
+                "summary_allowed_channel_ids",
+                "add",
+                channel_id,
+            )
+        await self._refresh(interaction, note="Salons resumables mis a jour.")
+
+    async def set_manager_roles(self, interaction: discord.Interaction, roles) -> None:
+        if not await self._guard(interaction):
+            return
+        ids = sorted({int(role.id) for role in roles if getattr(role, "id", None) is not None})
+        repo = GuildSettingsRepository()
+        await repo.mutate_summary_id_list(self.guild_id, "galactia_manager_role_ids", "clear")
+        for role_id in ids:
+            await repo.mutate_summary_id_list(
+                self.guild_id,
+                "galactia_manager_role_ids",
+                "add",
+                role_id,
+            )
+        await self._refresh(interaction, note="Roles Galactia Manager mis a jour.")
+
+    @discord.ui.button(label="Resume IA", style=discord.ButtonStyle.secondary, row=0)
+    async def toggle_summary(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        if not await self._guard(interaction):
+            return
+        cfg = await self._settings()
+        next_enabled = not bool(cfg.get("summary_enabled"))
+        await GuildSettingsRepository().update_summary_field(self.guild_id, "summary_enabled", next_enabled)
+        await self._refresh(interaction, note=f"Resume IA {_format_enabled(next_enabled)}.")
+
+    @discord.ui.button(label="Twitch", style=discord.ButtonStyle.secondary, row=0)
+    async def toggle_twitch(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        if not await self._guard(interaction):
+            return
+        cfg = await self._settings()
+        next_enabled = not bool(cfg.get("twitch_enabled"))
+        channel_id = cfg.get("twitch_announce_channel_id")
+        if next_enabled and channel_id is None and isinstance(interaction.channel, discord.TextChannel):
+            channel_id = interaction.channel.id
+        cfg = await GuildSettingsRepository().update_twitch_setup(
+            self.guild_id,
+            enabled=next_enabled,
+            channel_id=channel_id if next_enabled else None,
+            seconds=int(cfg.get("twitch_check_interval") or settings.twitch_check_interval),
+        )
+        twitch_cog = self.bot.get_cog("TwitchNotifier")
+        if twitch_cog and hasattr(twitch_cog, "refresh_poll_interval"):
+            await twitch_cog.refresh_poll_interval()
+        await self._refresh(interaction, note=f"Twitch {_format_enabled(cfg['twitch_enabled'])}.")
+
+    @discord.ui.button(label="YouTube", style=discord.ButtonStyle.secondary, row=0)
+    async def toggle_youtube(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        if not await self._guard(interaction):
+            return
+        cfg = await self._settings()
+        next_enabled = not bool(cfg.get("youtube_enabled"))
+        channel_id = cfg.get("youtube_announce_channel_id")
+        if next_enabled and channel_id is None and isinstance(interaction.channel, discord.TextChannel):
+            channel_id = interaction.channel.id
+        cfg = await GuildSettingsRepository().update_youtube_setup(
+            self.guild_id,
+            enabled=next_enabled,
+            channel_id=channel_id if next_enabled else None,
+            seconds=int(cfg.get("youtube_check_interval") or settings.youtube_check_interval),
+        )
+        youtube_cog = self.bot.get_cog("YouTubeNotifier")
+        if youtube_cog and hasattr(youtube_cog, "refresh_poll_interval"):
+            await youtube_cog.refresh_poll_interval()
+        await self._refresh(interaction, note=f"YouTube {_format_enabled(cfg['youtube_enabled'])}.")
+
+    @discord.ui.button(label="Tous les salons", style=discord.ButtonStyle.primary, row=1)
+    async def all_channels(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        if not await self._guard(interaction):
+            return
+        await GuildSettingsRepository().mutate_summary_id_list(
+            self.guild_id,
+            "summary_allowed_channel_ids",
+            "clear",
+        )
+        await self._refresh(interaction, note="Les resumes IA sont autorises dans tous les salons accessibles.")
+
+    @discord.ui.button(label="Verifier permissions", style=discord.ButtonStyle.secondary, row=1)
+    async def check_permissions(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        if not await self._guard(interaction):
+            return
+        cfg = await self._settings()
+        gaps = collect_setup_permission_gaps(interaction.guild, cfg)
+        note = "Permissions ok." if not gaps else "Permissions manquantes:\n- " + "\n- ".join(gaps)
+        await self._refresh(interaction, note=note)
+
+    @discord.ui.button(label="Terminer setup", style=discord.ButtonStyle.success, row=1)
+    async def finish_setup(self, interaction: discord.Interaction, _button: discord.ui.Button):
+        if not await self._guard(interaction):
+            return
+        cfg = await self._settings()
+        gaps = collect_setup_permission_gaps(interaction.guild, cfg)
+        if gaps:
+            await self._refresh(interaction, note="Setup incomplet:\n- " + "\n- ".join(gaps))
+            return
+        await GuildSettingsRepository().mark_setup_finished(
+            self.guild_id,
+            user_id=getattr(interaction.user, "id", None),
+            channel_id=getattr(getattr(interaction, "channel", None), "id", None),
+        )
+        await self._refresh(interaction, note="Setup Galactia termine.")
+
+
 class GalactiaAdminCog(commands.GroupCog, name="galactia"):
     """Guild-level administration commands for Galactia."""
 
@@ -82,18 +301,27 @@ class GalactiaAdminCog(commands.GroupCog, name="galactia"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    async def _send(self, interaction: discord.Interaction, content: str, *, ephemeral: bool = False):
+    async def _send(
+        self,
+        interaction: discord.Interaction,
+        content: str,
+        *,
+        ephemeral: bool = False,
+        view: discord.ui.View | None = None,
+    ):
         if interaction.response.is_done():
             await interaction.followup.send(
                 content,
                 allowed_mentions=AI_ALLOWED_MENTIONS,
                 ephemeral=ephemeral,
+                view=view,
             )
         else:
             await interaction.response.send_message(
                 content,
                 allowed_mentions=AI_ALLOWED_MENTIONS,
                 ephemeral=ephemeral,
+                view=view,
             )
 
     async def _ensure_settings(self, guild_id: int | None) -> dict:
@@ -101,9 +329,11 @@ class GalactiaAdminCog(commands.GroupCog, name="galactia"):
             raise RuntimeError("Guild-only command used without guild_id")
         return await load_summary_settings(guild_id)
 
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await can_manage_galactia(interaction)
+
     @app_commands.command(name="status", description="Afficher le statut IA et la configuration resume.")
     @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
     async def status(self, interaction: discord.Interaction):
         guild_id = interaction.guild_id
         cfg = await self._ensure_settings(guild_id)
@@ -131,8 +361,9 @@ class GalactiaAdminCog(commands.GroupCog, name="galactia"):
             f"- YouTube: `{_format_enabled(bool(cfg.get('youtube_enabled')))}`\n"
             f"- Timezone: `{cfg.get('timezone')}` / langue: `{cfg.get('language')}`\n"
             f"- Max messages: `{cfg.get('summary_max_messages')}` / max scan: `{cfg.get('summary_max_scan_messages')}`\n"
-            f"- Salons resumables: `{len(cfg.get('summary_allowed_channel_ids') or [])}`\n"
-            f"- Roles autorises: `{len(cfg.get('summary_allowed_role_ids') or [])}`\n"
+            f"- Salons resumables: {_format_channel_scope(cfg, interaction.guild)}\n"
+            f"- Roles autorises resume: {_format_role_scope(cfg, interaction.guild, 'summary_allowed_role_ids')}\n"
+            f"- Managers Galactia: {_format_role_scope(cfg, interaction.guild, 'galactia_manager_role_ids')}\n"
             f"- Quotas restants: guilde `{_remaining(cfg.get('summary_quota_guild_daily'), guild_usage['requests'])}`, "
             f"user `{_remaining(cfg.get('summary_quota_user_daily'), user_usage['requests'])}`, "
             f"salon `{_remaining(cfg.get('summary_quota_channel_daily'), channel_usage['requests'])}`, "
@@ -143,25 +374,20 @@ class GalactiaAdminCog(commands.GroupCog, name="galactia"):
 
     @setup.command(name="start", description="Initialiser la configuration de ce serveur.")
     @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
     async def setup_start(self, interaction: discord.Interaction):
         cfg = await self._ensure_settings(interaction.guild_id)
         channel_id = getattr(getattr(interaction, "channel", None), "id", None)
         cfg = await GuildSettingsRepository().mark_setup_started(interaction.guild_id, channel_id)
-        completed = "oui" if cfg.get("setup_completed_at") else "non"
-        content = (
-            "**Setup Galactia**\n"
-            f"- Setup deja termine: `{completed}`\n"
-            "- 1. `/galactia setup summary` pour le resume IA.\n"
-            "- 2. `/galactia setup twitch` pour les alertes Twitch.\n"
-            "- 3. `/galactia setup youtube` pour les alertes YouTube.\n"
-            "- 4. `/galactia setup finish` pour valider les permissions."
+        view = GalactiaSetupView(self.bot, int(interaction.guild_id))
+        await self._send(
+            interaction,
+            _setup_panel_content(cfg, interaction.guild),
+            ephemeral=True,
+            view=view,
         )
-        await self._send(interaction, content, ephemeral=True)
 
     @setup.command(name="summary", description="Configurer le module de resume IA.")
     @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
     @app_commands.choices(
         access_mode=[
             app_commands.Choice(name="admins_only", value="admins_only"),
@@ -216,13 +442,12 @@ class GalactiaAdminCog(commands.GroupCog, name="galactia"):
             interaction,
             "Resume IA configure: "
             f"`{_format_enabled(cfg['summary_enabled'])}`, mode `{cfg['summary_access_mode']}`, "
-            f"salons `{cfg.get('summary_allowed_channel_ids') or 'tous'}`.",
+            f"salons {_format_channel_scope(cfg, interaction.guild)}.",
             ephemeral=True,
         )
 
     @setup.command(name="twitch", description="Configurer le module Twitch.")
     @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
     async def setup_twitch(
         self,
         interaction: discord.Interaction,
@@ -255,7 +480,6 @@ class GalactiaAdminCog(commands.GroupCog, name="galactia"):
 
     @setup.command(name="youtube", description="Configurer le module YouTube.")
     @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
     async def setup_youtube(
         self,
         interaction: discord.Interaction,
@@ -290,7 +514,6 @@ class GalactiaAdminCog(commands.GroupCog, name="galactia"):
 
     @setup.command(name="finish", description="Valider les permissions et terminer le setup.")
     @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
     async def setup_finish(self, interaction: discord.Interaction):
         cfg = await self._ensure_settings(interaction.guild_id)
         gaps = collect_setup_permission_gaps(interaction.guild, cfg)
@@ -310,7 +533,6 @@ class GalactiaAdminCog(commands.GroupCog, name="galactia"):
 
     @config.command(name="timezone", description="Definir la timezone des resumes.")
     @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
     async def config_timezone(self, interaction: discord.Interaction, timezone: str):
         try:
             ZoneInfo(timezone)
@@ -323,7 +545,6 @@ class GalactiaAdminCog(commands.GroupCog, name="galactia"):
 
     @config.command(name="language", description="Definir la langue des resumes.")
     @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
     @app_commands.choices(
         language=[
             app_commands.Choice(name="fr", value="fr"),
@@ -341,7 +562,6 @@ class GalactiaAdminCog(commands.GroupCog, name="galactia"):
 
     @config.command(name="max_messages", description="Definir le maximum de messages resumables.")
     @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
     async def config_max_messages(self, interaction: discord.Interaction, max_messages: int):
         if max_messages < 1 or max_messages > 2000:
             await self._send(interaction, "Le maximum doit etre compris entre 1 et 2000.")
@@ -352,12 +572,11 @@ class GalactiaAdminCog(commands.GroupCog, name="galactia"):
 
     @config.command(name="allowed_channel", description="Gerer les salons resumables par /summary.")
     @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
     @app_commands.choices(
         action=[
             app_commands.Choice(name="add", value="add"),
             app_commands.Choice(name="remove", value="remove"),
-            app_commands.Choice(name="clear", value="clear"),
+            app_commands.Choice(name="all", value="all"),
             app_commands.Choice(name="list", value="list"),
         ]
     )
@@ -371,18 +590,17 @@ class GalactiaAdminCog(commands.GroupCog, name="galactia"):
         if action.value in {"add", "remove"} and channel is None:
             await self._send(interaction, "Indique un salon pour `add` ou `remove`.")
             return
+        list_action = "clear" if action.value == "all" else action.value
         cfg = await GuildSettingsRepository().mutate_summary_id_list(
             interaction.guild_id,
             "summary_allowed_channel_ids",
-            action.value,
+            list_action,
             getattr(channel, "id", None),
         )
-        ids = cfg.get("summary_allowed_channel_ids") or []
-        await self._send(interaction, f"Salons resumables: `{ids or 'tous'}`.")
+        await self._send(interaction, f"Salons resumables: {_format_channel_scope(cfg, interaction.guild)}.")
 
     @config.command(name="allowed_role", description="Gerer les roles autorises pour /summary.")
     @app_commands.guild_only()
-    @app_commands.default_permissions(administrator=True)
     @app_commands.choices(
         action=[
             app_commands.Choice(name="add", value="add"),
@@ -416,6 +634,37 @@ class GalactiaAdminCog(commands.GroupCog, name="galactia"):
             )
         ids = cfg.get("summary_allowed_role_ids") or []
         await self._send(interaction, f"Roles autorises: `{ids or 'tous'}`.")
+
+    @config.command(name="manager_role", description="Gerer les roles Galactia Manager.")
+    @app_commands.guild_only()
+    @app_commands.choices(
+        action=[
+            app_commands.Choice(name="add", value="add"),
+            app_commands.Choice(name="remove", value="remove"),
+            app_commands.Choice(name="clear", value="clear"),
+            app_commands.Choice(name="list", value="list"),
+        ]
+    )
+    async def config_manager_role(
+        self,
+        interaction: discord.Interaction,
+        action: app_commands.Choice[str],
+        role: discord.Role | None = None,
+    ):
+        await self._ensure_settings(interaction.guild_id)
+        if action.value in {"add", "remove"} and role is None:
+            await self._send(interaction, "Indique un role pour `add` ou `remove`.")
+            return
+        cfg = await GuildSettingsRepository().mutate_summary_id_list(
+            interaction.guild_id,
+            "galactia_manager_role_ids",
+            action.value,
+            getattr(role, "id", None),
+        )
+        await self._send(
+            interaction,
+            f"Managers Galactia: {_format_role_scope(cfg, interaction.guild, 'galactia_manager_role_ids')}.",
+        )
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):

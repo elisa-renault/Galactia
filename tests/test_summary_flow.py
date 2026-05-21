@@ -42,6 +42,7 @@ from galactia.handlers.summary import (
 from galactia.prompts import render_prompt
 from galactia.repositories.ai_requests import normalize_ai_request
 from galactia.repositories.guild_settings import normalize_settings_payload
+from galactia.permissions import user_can_manage_galactia
 from galactia.time_parser import parse_time_limit_deterministic
 
 
@@ -1812,6 +1813,7 @@ def test_summary_settings_and_ai_request_normalizers_keep_safe_defaults():
             "youtube_check_interval": 300,
             "summary_allowed_channel_ids": ["10"],
             "summary_allowed_role_ids": ["20"],
+            "galactia_manager_role_ids": ["30"],
             "summary_max_messages": 9999,
             "summary_max_scan_messages": 1,
         }
@@ -1820,6 +1822,7 @@ def test_summary_settings_and_ai_request_normalizers_keep_safe_defaults():
 
     assert settings_payload["summary_allowed_channel_ids"] == [10]
     assert settings_payload["summary_allowed_role_ids"] == [20]
+    assert settings_payload["galactia_manager_role_ids"] == [30]
     assert settings_payload["summary_max_messages"] == 2000
     assert settings_payload["summary_max_scan_messages"] == 2000
     assert settings_payload["summary_enabled"] is False
@@ -1828,6 +1831,26 @@ def test_summary_settings_and_ai_request_normalizers_keep_safe_defaults():
     assert settings_payload["youtube_enabled"] is False
     assert request_payload["request_type"] == "summary"
     assert request_payload["total_tokens"] == 42
+
+
+def test_galactia_manager_roles_allow_non_admin_management():
+    manager = SimpleNamespace(
+        roles=[SimpleNamespace(id=30)],
+        guild_permissions=SimpleNamespace(administrator=False),
+    )
+    outsider = SimpleNamespace(
+        roles=[SimpleNamespace(id=40)],
+        guild_permissions=SimpleNamespace(administrator=False),
+    )
+    admin = SimpleNamespace(
+        roles=[],
+        guild_permissions=SimpleNamespace(administrator=True),
+    )
+    cfg = {"galactia_manager_role_ids": [30]}
+
+    assert user_can_manage_galactia(manager, cfg) is True
+    assert user_can_manage_galactia(admin, cfg) is True
+    assert user_can_manage_galactia(outsider, cfg) is False
 
 
 def test_summary_config_access_checks_allowed_channels_and_roles():

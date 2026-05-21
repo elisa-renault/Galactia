@@ -35,13 +35,15 @@ Galactia repond, mais toutes les reponses IA utilisent
 - `/summary demande:<texte> [preset] [channel]` : resume le salon courant ou un salon cible.
 - `/galactia status` : affiche sante IA, configuration resume et usage du jour.
 - `/galactia setup start` : initialise l'onboarding de la guilde.
+- `/galactia setup start` ouvre aussi le panneau interactif ephemeral de configuration.
 - `/galactia setup summary ...` : active/configure les resumes IA.
 - `/galactia setup finish` : valide les permissions et marque le setup termine.
 - `/galactia config timezone <tz>` : definit la timezone, par defaut `Europe/Paris`.
 - `/galactia config language <fr|en>` : definit la langue de guilde.
 - `/galactia config max_messages <1..2000>` : ajuste le maximum selectionnable.
-- `/galactia config allowed_channel add|remove|clear|list [channel]` : limite les salons resumables.
+- `/galactia config allowed_channel add|remove|all|list [channel]` : limite les salons resumables ou revient a tous les salons accessibles.
 - `/galactia config allowed_role add|remove|clear|list [role]` : limite les roles autorises.
+- `/galactia config manager_role add|remove|clear|list [role]` : delegue l'administration Galactia a des roles Discord.
 
 Les commandes de configuration sont admin-only. Si une liste de salons resumables
 est definie, Galactia refuse les resumes dont le salon cible n'y figure pas. Si une liste de roles
