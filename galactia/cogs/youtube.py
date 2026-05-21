@@ -115,6 +115,21 @@ class YouTubeNotifier(commands.Cog):
             youtube_announce_channel_id=settings.youtube_announce_channel_id,
         )
 
+    async def _module_enabled(self, guild_id: int) -> bool:
+        cfg = await self.get_or_create_guild_settings(guild_id)
+        return bool(cfg.get("youtube_enabled", False))
+
+    async def refresh_poll_interval(self):
+        configs = await self.guild_settings_repo.list_all()
+        intervals = [
+            int(cfg["youtube_check_interval"])
+            for cfg in configs
+            if cfg.get("youtube_check_interval") and cfg.get("youtube_enabled", False)
+        ]
+        self.poll_interval = min(intervals) if intervals else int(settings.youtube_check_interval)
+        if self.poller.is_running():
+            self.poller.change_interval(seconds=self.poll_interval)
+
     def cog_unload(self):
         if self.poller.is_running():
             self.poller.cancel()
@@ -168,7 +183,11 @@ class YouTubeNotifier(commands.Cog):
                 ephemeral=True,
             )
         guild_id = int(interaction.guild_id)
-        await self.get_or_create_guild_settings(guild_id)
+        if not await self._module_enabled(guild_id):
+            return await interaction.followup.send(
+                "YouTube is not enabled yet. Run `/galactia setup youtube` first.",
+                ephemeral=True,
+            )
         if await self.follow_repo.exists(guild_id, cid, discord_channel.id):
             return await interaction.followup.send(
                 f"Already following **{title}** in {discord_channel.mention}.",
@@ -204,6 +223,11 @@ class YouTubeNotifier(commands.Cog):
                 "This command must be used in a server.",
                 ephemeral=True,
             )
+        if not await self._module_enabled(int(interaction.guild_id)):
+            return await interaction.response.send_message(
+                "YouTube is not enabled yet. Run `/galactia setup youtube` first.",
+                ephemeral=True,
+            )
         data = await self.follow_repo.list_by_guild(int(interaction.guild_id))
         if not data:
             return await interaction.response.send_message("No YouTube follows yet.", ephemeral=True)
@@ -230,6 +254,11 @@ class YouTubeNotifier(commands.Cog):
                 "This command must be used in a server.",
                 ephemeral=True,
             )
+        if not await self._module_enabled(int(interaction.guild_id)):
+            return await interaction.followup.send(
+                "YouTube is not enabled yet. Run `/galactia setup youtube` first.",
+                ephemeral=True,
+            )
 
         meta = await self._resolve_channel_meta(youtube_channel.strip())
         if not meta or not meta.get("channel_id"):
@@ -250,6 +279,11 @@ class YouTubeNotifier(commands.Cog):
         if interaction.guild_id is None:
             return await interaction.followup.send(
                 "This command must be used in a server.",
+                ephemeral=True,
+            )
+        if not await self._module_enabled(int(interaction.guild_id)):
+            return await interaction.followup.send(
+                "YouTube is not enabled yet. Run `/galactia setup youtube` first.",
                 ephemeral=True,
             )
         data = await self.follow_repo.list_by_guild(int(interaction.guild_id))
@@ -290,6 +324,11 @@ class YouTubeNotifier(commands.Cog):
         if interaction.guild_id is None:
             return await interaction.followup.send(
                 "This command must be used in a server.",
+                ephemeral=True,
+            )
+        if not await self._module_enabled(int(interaction.guild_id)):
+            return await interaction.followup.send(
+                "YouTube is not enabled yet. Run `/galactia setup youtube` first.",
                 ephemeral=True,
             )
         data = await self.follow_repo.list_by_guild(int(interaction.guild_id))
@@ -334,6 +373,14 @@ class YouTubeNotifier(commands.Cog):
             return
 
         data = await self.follow_repo.list_all()
+        if not data:
+            return
+        configs = {int(cfg["guild_id"]): cfg for cfg in await self.guild_settings_repo.list_all()}
+        data = [
+            row
+            for row in data
+            if configs.get(int(row["guild_id"]), {}).get("youtube_enabled", False)
+        ]
         if not data:
             return
 
@@ -606,23 +653,5 @@ class YouTubeNotifier(commands.Cog):
 async def setup(bot: commands.Bot):
     cog = YouTubeNotifier(bot)
     await bot.add_cog(cog)
-
-    try:
-        guild_id = os.getenv("DISCORD_GUILD_ID")
-        if guild_id:
-            guild = discord.Object(id=int(guild_id))
-            try:
-                bot.tree.remove_command(cog.youtube_group.name, type=cog.youtube_group.type, guild=guild)
-            except Exception:
-                pass
-            bot.tree.add_command(cog.youtube_group, guild=guild)
-            logger.info("Registered /%s group for guild %s", cog.youtube_group.name, guild_id)
-        else:
-            try:
-                bot.tree.remove_command(cog.youtube_group.name, type=cog.youtube_group.type)
-            except Exception:
-                pass
-            bot.tree.add_command(cog.youtube_group)
-            logger.info("Registered /%s group (global)", cog.youtube_group.name)
-    except Exception as e:
-        logger.exception("Failed to register /youtube group: %s", e)
+    if cog.youtube_key:
+        await cog.refresh_poll_interval()

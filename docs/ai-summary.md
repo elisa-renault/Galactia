@@ -34,6 +34,9 @@ Galactia repond, mais toutes les reponses IA utilisent
 
 - `/summary demande:<texte> [preset] [channel]` : resume le salon courant ou un salon cible.
 - `/galactia status` : affiche sante IA, configuration resume et usage du jour.
+- `/galactia setup start` : initialise l'onboarding de la guilde.
+- `/galactia setup summary ...` : active/configure les resumes IA.
+- `/galactia setup finish` : valide les permissions et marque le setup termine.
 - `/galactia config timezone <tz>` : definit la timezone, par defaut `Europe/Paris`.
 - `/galactia config language <fr|en>` : definit la langue de guilde.
 - `/galactia config max_messages <1..2000>` : ajuste le maximum selectionnable.
@@ -44,6 +47,9 @@ Les commandes de configuration sont admin-only. Si une liste de salons resumable
 est definie, Galactia refuse les resumes dont le salon cible n'y figure pas. Si une liste de roles
 autorises est definie, l'utilisateur doit avoir un role autorise ou etre
 administrateur.
+
+Sur une nouvelle guilde publique, le resume IA est desactive tant qu'un
+administrateur n'a pas termine `/galactia setup`.
 
 ## Intention structuree
 
@@ -258,15 +264,15 @@ Cache memoire process :
 - cle exacte incluant guilde, salon source, periode, limite, auteurs, mode, focus et preset ;
 - pour les demandes count-only sans `time_limit`, le timestamp precis `end=now` n'est pas inclus.
 
-Quotas soft persistants :
+Quotas persistants :
 
 - guilde : 100 resumes/jour par defaut ;
 - user : 20/jour ;
 - salon source : 50/jour ;
 - tokens guilde : 500k/jour.
 
-Un depassement est logge et visible dans `/galactia status`, mais ne bloque pas
-encore l'utilisateur.
+Un depassement est logge, visible dans `/galactia status`, refuse proprement la
+generation et journalise `quota_exceeded`.
 
 ## Observabilite DB
 

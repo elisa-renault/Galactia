@@ -25,6 +25,7 @@ from galactia.cogs.ai import (
     resolve_llm_authors_to_ids,
     send_summary_response,
     send_summary_text,
+    summary_quota_exceeded_reasons,
     summary_scan_limit_from_settings,
     validate_summary_config_access,
 )
@@ -1821,6 +1822,10 @@ def test_summary_settings_and_ai_request_normalizers_keep_safe_defaults():
     assert settings_payload["summary_allowed_role_ids"] == [20]
     assert settings_payload["summary_max_messages"] == 2000
     assert settings_payload["summary_max_scan_messages"] == 2000
+    assert settings_payload["summary_enabled"] is False
+    assert settings_payload["summary_access_mode"] == "admins_only"
+    assert settings_payload["twitch_enabled"] is False
+    assert settings_payload["youtube_enabled"] is False
     assert request_payload["request_type"] == "summary"
     assert request_payload["total_tokens"] == 42
 
@@ -1850,6 +1855,8 @@ def test_summary_config_access_checks_allowed_channels_and_roles():
         channel_mentions=[],
     )
     cfg = {
+        "summary_enabled": True,
+        "summary_access_mode": "allowed_roles",
         "summary_allowed_channel_ids": [10],
         "summary_allowed_role_ids": [20],
     }
@@ -1866,6 +1873,40 @@ def test_summary_config_access_checks_allowed_channels_and_roles():
     assert validate_summary_config_access(request, cfg) is not None
     request.author = admin
     assert validate_summary_config_access(request, cfg) is None
+
+    cfg["summary_enabled"] = False
+    assert validate_summary_config_access(request, cfg) is not None
+    cfg["summary_enabled"] = True
+    cfg["summary_access_mode"] = "admins_only"
+    request.author = user
+    assert validate_summary_config_access(request, cfg) is not None
+    cfg["summary_access_mode"] = "everyone"
+    request.author = SimpleNamespace(
+        id=3,
+        roles=[],
+        guild_permissions=SimpleNamespace(administrator=False),
+    )
+    assert validate_summary_config_access(request, cfg) is None
+
+
+def test_summary_quota_exceeded_reasons_blocks_configured_limits():
+    cfg = {
+        "summary_quota_guild_daily": 10,
+        "summary_quota_user_daily": 2,
+        "summary_quota_channel_daily": 5,
+        "summary_quota_tokens_daily": 100,
+    }
+    usage = {
+        "guild": {"requests": 10, "tokens": 100},
+        "user": {"requests": 1, "tokens": 0},
+        "channel": {"requests": 6, "tokens": 0},
+    }
+
+    assert summary_quota_exceeded_reasons(cfg, usage) == [
+        "guild_requests",
+        "channel_requests",
+        "guild_tokens",
+    ]
 
 
 def test_summary_scan_limit_uses_configured_cap():
