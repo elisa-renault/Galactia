@@ -234,7 +234,17 @@ def _parse_named_fixed_range(text: str, now: datetime, tz: ZoneInfo) -> TimeRang
     today_start, today_end = _day_bounds(now, tz)
     yesterday_start, yesterday_end = _day_bounds(now - timedelta(days=1), tz)
 
-    if text in {"aujourd'hui", "aujourdhui", "today"}:
+    if text in {
+        "aujourd'hui",
+        "aujourdhui",
+        "d'aujourd'hui",
+        "d'aujourdhui",
+        "du jour",
+        "ce jour",
+        "jour",
+        "la journee",
+        "today",
+    }:
         return _result(today_start, min(now, today_end), "today")
     if text == "hier":
         return _result(yesterday_start, yesterday_end, "yesterday")

@@ -1571,9 +1571,22 @@ def test_time_parser_handles_common_french_ranges():
     explicit = parse_time_limit_deterministic("entre 21h et 23h", now=now, timezone_name="Europe/Paris")
     today = parse_time_limit_deterministic("aujourd’hui", now=now, timezone_name="Europe/Paris")
 
+    today_with_prefix = parse_time_limit_deterministic(
+        "d'aujourd'hui",
+        now=now,
+        timezone_name="Europe/Paris",
+    )
+    today_as_daily_phrase = parse_time_limit_deterministic(
+        "du jour",
+        now=now,
+        timezone_name="Europe/Paris",
+    )
+
     assert yesterday.matched_rule == "yesterday"
     assert morning.matched_rule == "this_morning"
     assert today.matched_rule == "today"
+    assert today_with_prefix.matched_rule == "today"
+    assert today_as_daily_phrase.matched_rule == "today"
     assert since.start.hour == 8
     assert explicit.start.hour == 21
     assert explicit.end.hour == 23
