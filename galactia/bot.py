@@ -49,6 +49,12 @@ async def _setup_hook():
         logging.exception("Failed loading galactia.cogs.ai: %s", e)
 
     try:
+        await bot.load_extension("galactia.cogs.admin")
+        logging.info("Loaded extension: galactia.cogs.admin")
+    except Exception as e:
+        logging.exception("Failed loading galactia.cogs.admin: %s", e)
+
+    try:
         if guild_id:
             await bot.tree.sync(guild=discord.Object(id=int(guild_id)))
             logging.info("Slash commands synced (guild=%s).", guild_id)

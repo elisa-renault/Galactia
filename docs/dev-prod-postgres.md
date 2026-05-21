@@ -26,6 +26,12 @@ python -m pip install -r requirements.txt
 $env:ENV_FILE=".env.dev"; python -m alembic upgrade head
 ```
 
+If you are using Git Bash instead of PowerShell, use POSIX environment syntax:
+
+```bash
+ENV_FILE=.env.dev python -m alembic upgrade head
+```
+
 5. Optionally import legacy JSON data into the local development database:
 
 ```powershell
@@ -39,6 +45,12 @@ $env:ENV_FILE=".env.dev"; python scripts/migrate_json_to_postgres.py
 $env:ENV_FILE=".env.dev"; python -m galactia.main
 ```
 
+Git Bash equivalent:
+
+```bash
+ENV_FILE=.env.dev python -m galactia.main
+```
+
 Useful development commands:
 
 ```powershell
@@ -46,6 +58,24 @@ docker compose -f docker-compose.dev.yml ps
 docker compose -f docker-compose.dev.yml logs postgres
 docker compose -f docker-compose.dev.yml down
 ```
+
+## AI Summary Development Checks
+
+The AI summary flow has fake Discord tests and a local script that does not call
+Discord or OpenAI:
+
+```powershell
+python -m compileall galactia tests scripts
+python -m pytest -q
+python scripts\test_summary_flow_local.py
+```
+
+Details are documented in [`docs/ai-summary.md`](ai-summary.md).
+
+The P2 AI summary migration adds guild-level configuration columns to
+`guild_settings` and creates `ai_requests` for request status, token usage,
+latency and retrieval statistics. It deliberately does not store Discord message
+content, full prompts or raw generated summaries.
 
 ## Production On Debian VPS
 

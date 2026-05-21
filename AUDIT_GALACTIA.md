@@ -4,6 +4,42 @@ Date d'audit : 2026-05-19
 Cible analysee : Galactia comme bot Discord IA pour guildes WoW/MMO  
 Base d'audit : depot actuel + ambition produit de lancement public  
 
+## Mise a jour 2026-05-21 - Durcissement AI Summary
+
+Depuis cet audit, plusieurs P0 du flux de resume IA ont ete corriges :
+
+- intention structuree en JSON validee par Pydantic v2 ;
+- `selection_mode` explicite `latest` / `earliest` ;
+- `count_limit` borne a `1..500` ;
+- `count_limit` sans `time_limit` recupere les N derniers messages sans borne basse de date ;
+- mention directe obligatoire de Galactia, sans declenchement par `@everyone`, `@here` ou role seul ;
+- refus des filtres auteur texte inconnus ou ambigus, au lieu de resumer tout le salon ;
+- cooldown fort applique apres confirmation `intent.summary=True` ;
+- cache memoire 2 minutes avec cle adaptee aux demandes count-only ;
+- recuperation Discord avec scan elargi (`scan_limit`) et logs `messages_scanned` / `messages_selected` ;
+- sortie Discord sans ping via `AllowedMentions.none()` ;
+- split des longs resumes sans troncature normale ;
+- reduction des logs de contenu utilisateur ;
+- tests fake Discord et script local sans Discord/OpenAI.
+- commande publique `/summary demande:<texte>` partageant le meme pipeline que la mention directe ;
+- types internes `SummaryRequest` et `SummaryResult` pour unifier le flux et exposer les stats ;
+- prompts OpenAI extraits en fichiers versionnes `galactia/prompts/*.v1.md` ;
+- refus deterministe des mentions/liens vers un autre salon avant appel OpenAI ;
+- feedback utilisateur `Resume de X messages, Y ignores` ;
+- golden tests offline sur 30 prompts FR representatifs.
+- parser temporel deterministe FR a la place du parsing de dates par LLM ;
+- `AIService` async natif avec `AsyncOpenAI`, retry, timeout, usage tokens et latence ;
+- table `ai_requests` pour journaliser statuts, tokens, latence et stats de recuperation sans contenu utilisateur ;
+- quotas soft par guilde/user/salon/tokens, visibles dans `/galactia status` ;
+- configuration guilde : timezone, langue, salons/roles autorises, limites de messages et scan ;
+- presets `catchup`, `decisions`, `actions`, `raid`, `drama`, `funny` ;
+- map-reduce pour gros volumes avec citations `[Sx]` et jump links Discord ;
+- commandes admin `/galactia status` et `/galactia config ...`.
+
+Les critiques de fond restent valables pour une ambition SaaS ou multi-guild
+large : quotas bloquants, observabilite externe, memoire/indexation, workers
+asynchrones dedies et dashboard web restent a traiter.
+
 ## 0. Verdict executif
 
 Galactia a une base utile pour une guilde privee : notifications Twitch/YouTube et resume IA de salon. En revanche, le depot actuel ne correspond pas encore a l'ambition d'un produit SaaS Discord IA scalable pour communautes gaming. Le risque principal n'est pas un manque d'idees, c'est l'inverse : trop d'ambition produit pour une architecture encore mono-instance, locale, peu testee, et sans modele multi-serveur robuste.
