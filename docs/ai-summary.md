@@ -129,12 +129,12 @@ Prompts actifs :
 
 - `intent.v2.md`
 - `sanitize.v1.md`
-- `summary_single.v2.md`
-- `summary_map.v1.md`
-- `summary_reduce.v1.md`
+- `summary_single.v3.md`
+- `summary_map.v2.md`
+- `summary_reduce.v2.md`
 
-Les anciens prompts v1 restent dans le repo pour historique/tests. Les logs
-peuvent indiquer le nom/version du prompt, mais ne loggent pas son contenu.
+Les anciens prompts restent dans le repo pour historique/tests. Les logs peuvent
+indiquer le nom/version du prompt, mais ne loggent pas son contenu.
 
 ## Ciblage deterministe du salon source
 
@@ -167,7 +167,7 @@ La limite utilisateur est configurable par guilde :
 
 Comportement :
 
-- `time_limit` present : Galactia calcule `start/end` et recupere jusqu'au maximum configure si aucun `count_limit` n'est fourni.
+- `time_limit` present sans `count_limit` : Galactia calcule `start/end` et recupere jusqu'a 150 messages max par defaut pour rester rapide.
 - `count_limit` present sans `time_limit` : `start=None`, `end=now`, et recuperation des N derniers messages valides sans borne basse de date.
 - Aucun `time_limit` et aucun `count_limit` : fallback sur les dernieres 24h avec `limit=100` et notice utilisateur.
 
@@ -180,7 +180,8 @@ Messages exclus :
 
 - messages vides ;
 - messages de bots ;
-- messages qui mentionnent Galactia ;
+- messages qui mentionnent Galactia directement, y compris via `<@id>` brut ;
+- anciennes invocations de resume comme `/summary ...` ou `/galactia summary ...` ;
 - messages dont l'auteur ne correspond pas au filtre demande.
 
 Le sous-ensemble final est toujours transmis au modele en ordre chronologique.
@@ -197,7 +198,7 @@ erreur.
 La mention de Galactia elle-meme sert uniquement a appeler le bot et n'est
 jamais consideree comme un filtre auteur.
 
-## Generation, presets et citations
+## Generation et presets
 
 Presets disponibles :
 
@@ -212,18 +213,21 @@ Le preset slash est prioritaire sur le preset detecte dans l'intention.
 
 Format de sortie principal :
 
-- section `Resume` ;
-- section `Points importants`.
+- 3 a 7 bullet points courts par defaut ;
+- petit paragraphe court si la discussion est simple ou narrative ;
+- pas de citations, pas d'IDs source `[Sx]`, pas de jump links, pas de section `Sources`.
 
-Si `messages_selected > 500` ou si le budget tokens single-pass est depasse,
-Galactia utilise un resume map-reduce :
+Avant l'appel OpenAI, chaque message est compacte et tronque pour eviter qu'un
+petit nombre de messages tres longs force plusieurs appels IA.
+
+Galactia privilegie un resume single-pass rapide. Le map-reduce est reserve aux
+gros volumes (`messages_selected > 300`) ou aux corpus encore trop lourds apres
+compaction :
 
 1. messages chronologiques en lots token-safe ;
-2. IDs source stables `[S1]`, `[S2]`, etc. dans le prompt ;
-3. reduction finale avec citations `[Sx]` pour les affirmations importantes ;
-4. section `Sources` avec jusqu'a 8 jump links Discord cites par le modele.
-
-Si le modele ne cite aucun `[Sx]`, Galactia n'invente pas de source.
+2. jusqu'a 6 lots traites en parallele avec concurrence max 3 ;
+3. resume partiel de chaque lot en bullets courts ;
+4. reduction finale simple sans citations ni sources.
 
 ## Service OpenAI
 
@@ -237,7 +241,8 @@ Si le modele ne cite aucun `[Sx]`, Galactia n'invente pas de source.
 Timeouts actuels :
 
 - intention/nettoyage : 25s + buffer global ;
-- generation de resume : 90s + buffer global.
+- generation single-pass : 30s + buffer global ;
+- generation map-reduce : 35s par appel map/reduce, avec lots map paralleles.
 
 ## Cooldown, cache et quotas
 
@@ -288,20 +293,19 @@ Le texte complet est genere avant toute decision de formatage Discord.
 Sur resume reussi, la reponse commence par :
 
 ```text
-ℹ️ Résumé de X messages, Y ignorés.
+Résumé de X messages.
 ```
 
 Pour un resume cross-channel, le feedback indique le salon source :
 
 ```text
-ℹ️ Résumé de X messages de #salon, Y ignorés.
+Résumé de X messages de #salon.
 ```
 
-Si map-reduce a ete utilise sur plusieurs lots, le feedback ajoute :
-
-```text
-Traitement en N lots.
-```
+Si plusieurs notices s'appliquent, elles sont fusionnees sur la premiere ligne,
+sans emoji Discord. Les compteurs de messages ignores et de lots map-reduce
+restent disponibles dans les logs et `ai_requests`, mais ne sont plus affiches
+dans la reponse publique.
 
 ## Tests locaux
 
@@ -324,7 +328,7 @@ Les tests incluent :
 - parser temporel deterministe ;
 - AIService async avec retry/usage ;
 - config guilde et quotas normalises ;
-- map-reduce avec citations et jump links.
+- map-reduce sans citations ni jump links.
 
 ## Exemples attendus
 

@@ -13,9 +13,15 @@ MAX_DISCORD = 2000
 MAX_FETCH_MESSAGES = 2000
 MAX_SCAN_MESSAGES = 5000
 DEFAULT_FETCH_MESSAGES = 100
-SUMMARY_OPENAI_TIMEOUT_SECONDS = 90
-SINGLE_PASS_TOKEN_LIMIT = 12000
-MAP_CHUNK_TOKEN_LIMIT = 9000
+SUMMARY_OPENAI_TIMEOUT_SECONDS = 30
+SUMMARY_MAP_TIMEOUT_SECONDS = 35
+SINGLE_PASS_TOKEN_LIMIT = 7000
+MAP_CHUNK_TOKEN_LIMIT = 4500
+SUMMARY_MESSAGE_CHAR_LIMIT = 350
+SUMMARY_FAST_MESSAGE_CHAR_LIMIT = 80
+MAP_REDUCE_MESSAGE_THRESHOLD = 300
+MAP_REDUCE_MAX_CHUNKS = 6
+MAP_REDUCE_PARALLELISM = 3
 
 
 @dataclass
@@ -36,7 +42,7 @@ class SummaryGenerationResult:
     latency_ms: int = 0
     attempts: int = 0
     chunks_processed: int = 1
-    prompt_version: str = "summary_single.v2"
+    prompt_version: str = "summary_single.v3"
 
 
 # Reuse tokenizer instance to avoid repeated initialization.
@@ -100,7 +106,7 @@ def _response_stats(response) -> dict:
 def _merge_stats(
     *stats: dict,
     chunks_processed: int = 1,
-    prompt_version: str = "summary_single.v2",
+    prompt_version: str = "summary_single.v3",
 ) -> SummaryGenerationResult:
     merged = {
         "model": None,
@@ -132,13 +138,40 @@ def _merge_stats(
     )
 
 
-def _format_message_line(index: int, msg) -> tuple[str, str, str | None]:
-    source_id = f"S{index}"
+def _compact_message_content(content: str, limit: int) -> tuple[str, bool]:
+    compacted = re.sub(r"\s+", " ", str(content or "")).strip()
+    if len(compacted) <= limit:
+        return compacted, False
+    return compacted[:limit].rstrip() + "…", True
+
+
+def _format_message_line(msg, *, content_limit: int = SUMMARY_MESSAGE_CHAR_LIMIT) -> tuple[str, bool]:
     timestamp = msg.created_at.strftime("%d/%m/%Y %H:%M")
     author = getattr(getattr(msg, "author", None), "display_name", "Utilisateur")
-    content = str(getattr(msg, "content", "") or "").replace("\n", " ").strip()
-    jump_url = getattr(msg, "jump_url", None)
-    return f"[{source_id}] [{timestamp}] {author} : {content}", source_id, jump_url
+    content, truncated = _compact_message_content(
+        str(getattr(msg, "content", "") or ""),
+        content_limit,
+    )
+    return f"[{timestamp}] {author} : {content}", truncated
+
+
+def _prepare_message_lines(messages, *, content_limit: int) -> tuple[list[str], int]:
+    lines = []
+    truncated_messages = 0
+    for msg in messages:
+        line, truncated = _format_message_line(msg, content_limit=content_limit)
+        lines.append(line)
+        if truncated:
+            truncated_messages += 1
+    return lines, truncated_messages
+
+
+def _prompt_token_count(instructions: str, base_prompt: str, lines: list[str]) -> int:
+    return (
+        estimate_token_count(instructions)
+        + estimate_token_count(base_prompt)
+        + estimate_token_count("\n".join(lines))
+    )
 
 
 def _chunk_lines_by_tokens(lines: list[str], token_budget: int) -> list[str]:
@@ -158,19 +191,43 @@ def _chunk_lines_by_tokens(lines: list[str], token_budget: int) -> list[str]:
     return chunks
 
 
-def _append_sources(summary: str, sources: dict[str, str | None]) -> str:
-    cited_ids = []
-    for match in re.findall(r"\[S(\d+)\]", summary or ""):
-        source_id = f"S{match}"
-        if source_id in sources and source_id not in cited_ids and sources[source_id]:
-            cited_ids.append(source_id)
-        if len(cited_ids) >= 8:
-            break
-    if not cited_ids:
+def _strip_source_artifacts(summary: str) -> str:
+    if not summary:
         return summary
-    lines = ["", "**Sources**"]
-    lines.extend(f"- [{source_id}]({sources[source_id]})" for source_id in cited_ids)
-    return summary.rstrip() + "\n" + "\n".join(lines)
+    lines = []
+    in_sources_section = False
+    for line in summary.splitlines():
+        stripped = line.strip().lower()
+        if stripped in {"**sources**", "sources", "### sources", "## sources"}:
+            in_sources_section = True
+            continue
+        if in_sources_section:
+            if line.strip().startswith("**") and "source" not in stripped:
+                in_sources_section = False
+            else:
+                continue
+        lines.append(line)
+    cleaned = "\n".join(lines)
+    cleaned = re.sub(r"\s*\[S\d+\]", "", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _message_mentions_bot(msg, bot_user) -> bool:
+    bot_id = getattr(bot_user, "id", None)
+    if bot_id is None:
+        return False
+    bot_id_str = str(bot_id)
+    for mentioned_user in getattr(msg, "mentions", []) or []:
+        if str(getattr(mentioned_user, "id", "")) == bot_id_str:
+            return True
+    content = str(getattr(msg, "content", "") or "")
+    return f"<@{bot_id_str}>" in content or f"<@!{bot_id_str}>" in content
+
+
+def _looks_like_summary_invocation(content: str) -> bool:
+    normalized = (content or "").strip().lower()
+    return normalized.startswith("/summary") or normalized.startswith("/galactia summary")
 
 
 def normalize_fetch_limit(limit: Optional[int]) -> int:
@@ -229,7 +286,9 @@ async def fetch_valid_messages(
             continue
         if msg.author.bot:
             continue
-        if bot.user in msg.mentions:
+        if _message_mentions_bot(msg, bot.user):
+            continue
+        if _looks_like_summary_invocation(msg.content):
             continue
         if authors and not is_author_allowed(
             msg.author.display_name, str(msg.author.id), authors
@@ -265,6 +324,7 @@ async def generate_summary(
     focus: Optional[str] = None,
     *,
     preset: str = "catchup",
+    selection_mode: Literal["latest", "earliest"] = "latest",
     return_result: bool = False,
 ):
     def finish(result: SummaryGenerationResult):
@@ -276,80 +336,106 @@ async def generate_summary(
 
         messages.sort(key=lambda m: m.created_at)
 
-        sources: dict[str, str | None] = {}
-        lines = []
-        for index, msg in enumerate(messages, start=1):
-            line, source_id, jump_url = _format_message_line(index, msg)
-            lines.append(line)
-            sources[source_id] = jump_url
-
         instructions = render_prompt(
-            "summary_single.v2.md",
+            "summary_single.v3.md",
             focus=focus or "aucun focus spécifique",
             preset=preset or "catchup",
         )
 
         base_prompt = "Résume ces messages Discord chronologiques :\n"
-        total_tokens = estimate_token_count(instructions) + estimate_token_count(base_prompt)
-        selected_lines = []
+        lines, truncated_messages = _prepare_message_lines(
+            messages,
+            content_limit=SUMMARY_MESSAGE_CHAR_LIMIT,
+        )
+        total_tokens = _prompt_token_count(instructions, base_prompt, lines)
 
-        for line in lines:
-            tokens = estimate_token_count(line + "\n")
-            if total_tokens + tokens > SINGLE_PASS_TOKEN_LIMIT:
-                break
-            selected_lines.append(line)
-            total_tokens += tokens
+        if len(messages) <= MAP_REDUCE_MESSAGE_THRESHOLD and total_tokens > SINGLE_PASS_TOKEN_LIMIT:
+            for fast_limit in (SUMMARY_FAST_MESSAGE_CHAR_LIMIT, 60, 40, 24):
+                fast_lines, fast_truncated = _prepare_message_lines(
+                    messages,
+                    content_limit=fast_limit,
+                )
+                fast_tokens = _prompt_token_count(instructions, base_prompt, fast_lines)
+                if fast_tokens < total_tokens:
+                    lines = fast_lines
+                    total_tokens = fast_tokens
+                    truncated_messages = fast_truncated
+                if total_tokens <= SINGLE_PASS_TOKEN_LIMIT:
+                    break
 
-        messages_text = "\n".join(selected_lines)
+        messages_text = "\n".join(lines)
+        should_map_reduce = len(messages) > MAP_REDUCE_MESSAGE_THRESHOLD or total_tokens > SINGLE_PASS_TOKEN_LIMIT
         logging.info(
-            "Summary prompt prepared: tokens=%d lines=%d input_chars=%d preset=%s.",
+            "Summary prompt prepared: generation_strategy=%s lines_total=%d lines_used=%d "
+            "input_tokens=%d input_chars=%d truncated_messages=%d preset=%s.",
+            "map_reduce" if should_map_reduce else "single",
+            len(messages),
+            len(lines),
             total_tokens,
-            len(selected_lines),
             len(messages_text),
+            truncated_messages,
             preset,
         )
-        if not selected_lines:
+        if not lines:
             logging.info("No lines kept for summary.")
 
-        should_map_reduce = len(messages) > 500 or len(selected_lines) < len(lines)
         if should_map_reduce:
             map_instructions = render_prompt(
-                "summary_map.v1.md",
+                "summary_map.v2.md",
                 focus=focus or "aucun focus spécifique",
                 preset=preset or "catchup",
             )
             reduce_instructions = render_prompt(
-                "summary_reduce.v1.md",
+                "summary_reduce.v2.md",
                 focus=focus or "aucun focus spécifique",
                 preset=preset or "catchup",
             )
             chunks = _chunk_lines_by_tokens(lines, MAP_CHUNK_TOKEN_LIMIT)
-            partials = []
-            stats = []
+            if len(chunks) > MAP_REDUCE_MAX_CHUNKS:
+                if selection_mode == "earliest":
+                    chunks = chunks[:MAP_REDUCE_MAX_CHUNKS]
+                else:
+                    chunks = chunks[-MAP_REDUCE_MAX_CHUNKS:]
             logging.info(
-                "Summary map-reduce enabled: messages=%d chunks=%d preset=%s.",
+                "Summary map-reduce enabled: messages=%d chunks=%d parallelism=%d "
+                "truncated_messages=%d preset=%s.",
                 len(messages),
                 len(chunks),
+                MAP_REDUCE_PARALLELISM,
+                truncated_messages,
                 preset,
             )
-            for chunk_number, chunk in enumerate(chunks, start=1):
-                resp = await create_chat_completion(
-                    model="gpt-5-mini",
-                    messages=[
-                        {"role": "system", "content": map_instructions},
-                        {
-                            "role": "user",
-                            "content": (
-                                f"Lot {chunk_number}/{len(chunks)} de messages "
-                                f"Discord chronologiques :\n{chunk}"
-                            ),
-                        },
-                    ],
-                    timeout=SUMMARY_OPENAI_TIMEOUT_SECONDS,
-                    _overall_timeout=SUMMARY_OPENAI_TIMEOUT_SECONDS + 5,
-                )
-                partials.append((resp.choices[0].message.content or "").strip())
-                stats.append(_response_stats(resp))
+
+            semaphore = asyncio.Semaphore(MAP_REDUCE_PARALLELISM)
+
+            async def summarize_chunk(chunk_number: int, chunk: str):
+                async with semaphore:
+                    resp = await create_chat_completion(
+                        model="gpt-5-mini",
+                        messages=[
+                            {"role": "system", "content": map_instructions},
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"Lot {chunk_number}/{len(chunks)} de messages "
+                                    f"Discord chronologiques :\n{chunk}"
+                                ),
+                            },
+                        ],
+                        timeout=SUMMARY_MAP_TIMEOUT_SECONDS,
+                        _overall_timeout=SUMMARY_MAP_TIMEOUT_SECONDS + 5,
+                    )
+                    partial = _strip_source_artifacts((resp.choices[0].message.content or "").strip())
+                    return partial, _response_stats(resp)
+
+            chunk_results = await asyncio.gather(
+                *[
+                    summarize_chunk(chunk_number, chunk)
+                    for chunk_number, chunk in enumerate(chunks, start=1)
+                ]
+            )
+            partials = [partial for partial, _stats in chunk_results]
+            stats = [_stats for _partial, _stats in chunk_results]
 
             reduce_input = "\n\n".join(
                 f"Lot {index}:\n{partial}"
@@ -362,16 +448,16 @@ async def generate_summary(
                     {"role": "system", "content": reduce_instructions},
                     {"role": "user", "content": f"Résumés partiels :\n{reduce_input}"},
                 ],
-                timeout=SUMMARY_OPENAI_TIMEOUT_SECONDS,
-                _overall_timeout=SUMMARY_OPENAI_TIMEOUT_SECONDS + 5,
+                timeout=SUMMARY_MAP_TIMEOUT_SECONDS,
+                _overall_timeout=SUMMARY_MAP_TIMEOUT_SECONDS + 5,
             )
             raw_summary = (resp.choices[0].message.content or "").strip()
-            raw_summary = _append_sources(raw_summary or "Aucun résumé généré.", sources)
+            raw_summary = _strip_source_artifacts(raw_summary or "Aucun résumé généré.")
             result = _merge_stats(
                 *stats,
                 _response_stats(resp),
                 chunks_processed=len(chunks),
-                prompt_version="summary_map.v1+summary_reduce.v1",
+                prompt_version="summary_map.v2+summary_reduce.v2",
             )
             result.text = raw_summary
             return finish(result)
@@ -386,11 +472,11 @@ async def generate_summary(
             _overall_timeout=SUMMARY_OPENAI_TIMEOUT_SECONDS + 5,
         )
         raw_summary = (resp.choices[0].message.content or "").strip()
-        raw_summary = _append_sources(raw_summary or "Aucun résumé généré.", sources)
+        raw_summary = _strip_source_artifacts(raw_summary or "Aucun résumé généré.")
         result = _merge_stats(
             _response_stats(resp),
             chunks_processed=1,
-            prompt_version="summary_single.v2",
+            prompt_version="summary_single.v3",
         )
         result.text = raw_summary
         return finish(result)
