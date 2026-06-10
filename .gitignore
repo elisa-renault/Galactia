@@ -16,6 +16,9 @@ twitch_config.json
 twitch.json
 youtube.json
 
+# Notes et fichiers locaux non publies
+local/
+
 # Fichiers logs
 logs/
 *.log
