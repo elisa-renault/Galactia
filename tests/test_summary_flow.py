@@ -409,7 +409,7 @@ def test_on_message_non_summary_does_not_mark_summary_cooldown(monkeypatch):
 
     assert bot.processed == []
     assert channel.sent == ["⏳ Galactia réfléchit..."]
-    assert "pas encore disponible" in channel.sent_objects[0].edits[-1]
+    assert "terminer `/galactia setup`" in channel.sent_objects[0].edits[-1]
     assert cog._user_cooldowns == {}
     assert cog._channel_cooldowns == {}
 
